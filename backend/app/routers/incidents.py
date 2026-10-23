@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_api_key
+from app.core.auth import require_authenticated_user
 from app.dependencies import get_db
 from app.models import Incident
 from app.schemas import IncidentRead
@@ -10,7 +10,7 @@ from app.schemas import IncidentRead
 router = APIRouter(
     prefix="/incidents",
     tags=["incidents"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_authenticated_user)],
 )
 
 
