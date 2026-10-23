@@ -1,18 +1,35 @@
 import os
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.worker import MonitoringWorker
 from app.db.session import engine
 from app.routers.incidents import router as incidents_router
 from app.routers.monitors import router as monitors_router
 
+monitoring_worker = MonitoringWorker()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Start the monitoring worker with the API and stop it during shutdown."""
+    monitoring_worker.start()
+    try:
+        yield
+    finally:
+        monitoring_worker.stop()
+
+
 app = FastAPI(
     title="TraceStack API",
     description="API monitoring, check history, and incident management platform",
-    version="0.2.0",
+    version="0.3.0",
+    lifespan=lifespan,
 )
 
 origins = [
