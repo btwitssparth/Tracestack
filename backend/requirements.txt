@@ -2,6 +2,7 @@ alembic
 fastapi
 httpx
 psycopg[binary]
+PyJWT[crypto]
 pytest
 python-dotenv
 sqlalchemy
