@@ -34,3 +34,25 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+## Authenticated FastAPI integration
+
+The Next.js server proxies monitor-list requests to FastAPI and obtains the Supabase
+access token from the server-managed session. The token is never returned to the browser.
+
+Configure this server-only environment variable in `frontend/.env.local`:
+
+```env
+TRACESTACK_API_URL=http://127.0.0.1:8000
+```
+
+Use the deployed backend base URL for a deployed frontend. Do not add a
+`NEXT_PUBLIC_` prefix to `TRACESTACK_API_URL`; it should remain server-only.
+
+After restarting the Next.js dev server while signed in, open:
+
+- `http://localhost:3000/api/monitors` — returns the signed-in user's monitors.
+- `http://localhost:3000/api/auth-check` — diagnostic response showing whether FastAPI accepted the session, without exposing a token.
+
+A successful empty monitor list (`200` with `[]`) means token validation and the protected endpoint succeeded. A `401` means the backend did not accept the session. A `503` from the monitor proxy usually means the backend URL is not configured or reachable.
