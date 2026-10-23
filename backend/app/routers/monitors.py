@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_api_key
+from app.core.auth import require_authenticated_user
 from app.core.monitoring import perform_check
 from app.core.url_security import UnsafeTargetError, validate_public_http_url
 from app.dependencies import get_db
@@ -14,7 +14,7 @@ from app.schemas import CheckResultRead, MonitorCreate, MonitorRead, MonitorUpda
 router = APIRouter(
     prefix="/monitors",
     tags=["monitors"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_authenticated_user)],
 )
 
 
