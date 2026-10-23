@@ -20,9 +20,14 @@ class Monitor(Base):
         CheckConstraint("expected_status_code BETWEEN 100 AND 599", name="ck_monitors_expected_status"),
         CheckConstraint("timeout_seconds BETWEEN 1 AND 30", name="ck_monitors_timeout"),
         Index("ix_monitors_next_check_at", "next_check_at"),
+        Index("ix_monitors_owner_id", "owner_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Supabase Auth users live in a separate project/service from Neon, so store
+    # the verified Supabase subject UUID without a cross-database foreign key.
+    # Nullable only to preserve pre-existing rows until an explicit ownership decision.
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     check_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=300, server_default="300")
