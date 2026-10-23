@@ -4,13 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_api_key
 from app.core.monitoring import perform_check
 from app.core.url_security import UnsafeTargetError, validate_public_http_url
 from app.dependencies import get_db
 from app.models import CheckResult, Monitor
 from app.schemas import CheckResultRead, MonitorCreate, MonitorRead, MonitorUpdate
 
-router = APIRouter(prefix="/monitors", tags=["monitors"])
+router = APIRouter(
+    prefix="/monitors",
+    tags=["monitors"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 @router.post("", response_model=MonitorRead, status_code=status.HTTP_201_CREATED)
