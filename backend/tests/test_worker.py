@@ -88,7 +88,11 @@ def test_worker_checks_only_active_due_monitors(monkeypatch):
             active_paused = db.scalar(select(Monitor).where(Monitor.id == paused_id))
             active_future = db.scalar(select(Monitor).where(Monitor.id == future_id))
             assert active_paused.is_active is False
-            assert active_future.next_check_at > datetime.now(timezone.utc)
+            assert active_future.next_check_at is not None
+            future_next_check = active_future.next_check_at
+            if future_next_check.tzinfo is None:
+                future_next_check = future_next_check.replace(tzinfo=timezone.utc)
+            assert future_next_check > datetime.now(timezone.utc)
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
