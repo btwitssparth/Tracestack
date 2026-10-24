@@ -6,7 +6,6 @@ database-level claiming to avoid duplicate checks.
 """
 import logging
 import threading
-import time
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -58,7 +57,13 @@ def run_due_checks() -> int:
                 # Re-check due time after obtaining the lock; another worker or
                 # manual check may already have advanced the schedule.
                 now = datetime.now(timezone.utc)
-                if monitor.next_check_at is not None and monitor.next_check_at > now:
+                next_check_at = monitor.next_check_at
+                # SQLite drops timezone information when round-tripping DateTime
+                # values. Normalize only naive values so tests behave like the
+                # timezone-aware timestamps returned by PostgreSQL in production.
+                if next_check_at is not None and next_check_at.tzinfo is None:
+                    next_check_at = next_check_at.replace(tzinfo=timezone.utc)
+                if next_check_at is not None and next_check_at > now:
                     db.rollback()
                     continue
 
