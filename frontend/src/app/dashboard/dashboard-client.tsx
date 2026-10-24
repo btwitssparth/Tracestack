@@ -3,6 +3,16 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import SignOutButton from "./sign-out-button";
 
+type Incident = {
+  id: number;
+  monitor_id: number;
+  title: string;
+  status: "open" | "resolved";
+  started_at: string;
+  resolved_at: string | null;
+  summary: string | null;
+};
+
 type Monitor = {
   id: number;
   name: string;
@@ -31,6 +41,9 @@ function statusLabel(monitor: Monitor) {
 
 export default function DashboardClient({ email }: { email: string }) {
   const [monitors, setMonitors] = useState<Monitor[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(true);
+  const [incidentsError, setIncidentsError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -52,7 +65,22 @@ export default function DashboardClient({ email }: { email: string }) {
     }
   }, []);
 
-  useEffect(() => { void loadMonitors(); }, [loadMonitors]);
+  const loadIncidents = useCallback(async () => {
+    setIncidentsLoading(true);
+    setIncidentsError("");
+    try {
+      const response = await fetch("/api/incidents?limit=20", { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail || "Could not load incidents.");
+      setIncidents(Array.isArray(body) ? body : []);
+    } catch (err) {
+      setIncidentsError(err instanceof Error ? err.message : "Could not load incidents.");
+    } finally {
+      setIncidentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadMonitors(); void loadIncidents(); }, [loadMonitors, loadIncidents]);
 
   const stats = useMemo(() => ({
     total: monitors.length,
@@ -125,7 +153,7 @@ export default function DashboardClient({ email }: { email: string }) {
               <p className="mt-2 text-sm text-zinc-500">Keep an eye on availability and catch issues early.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => void loadMonitors()} disabled={loading} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-50">{loading ? "Refreshing…" : "↻ Refresh"}</button>
+              <button onClick={() => { void loadMonitors(); void loadIncidents(); }} disabled={loading || incidentsLoading} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-50">{loading || incidentsLoading ? "Refreshing…" : "↻ Refresh"}</button>
               <button onClick={() => { setFormError(""); setShowForm(true); }} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200">＋ Add monitor</button>
             </div>
           </div>
@@ -182,8 +210,17 @@ export default function DashboardClient({ email }: { email: string }) {
           </section>
 
           <section id="incidents" className="mt-6 rounded-2xl border border-white/[0.08] bg-[#101316] p-5 sm:p-6">
-            <div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-300/10 text-amber-200">△</span><div><h2 className="font-semibold">Incident activity</h2><p className="mt-1 text-sm text-zinc-500">Incident history will appear here as monitor checks detect and resolve outages.</p></div></div>
-            <div className="mt-5 rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-600">No incident activity to display yet.</div>
+            <div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-300/10 text-amber-200">△</span><div><h2 className="font-semibold">Incident activity</h2><p className="mt-1 text-sm text-zinc-500">Recent outages detected by your monitors.</p></div></div>
+            {incidentsError ? <p role="alert" className="mt-5 rounded-xl border border-rose-400/20 bg-rose-400/5 px-4 py-3 text-sm text-rose-200">{incidentsError}</p> : incidentsLoading ? <p className="mt-5 text-sm text-zinc-500">Loading incidents…</p> : incidents.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-600">No incidents recorded yet. Incidents appear after consecutive failed checks.</div> : <div className="mt-5 space-y-3">
+              {incidents.map((incident) => {
+                const monitor = monitors.find((item) => item.id === incident.monitor_id);
+                return <article key={incident.id} className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-zinc-200">{incident.title}</h3><p className="mt-1 text-xs text-zinc-500">{monitor?.name ?? `Monitor #${incident.monitor_id}`} · Started {formatDate(incident.started_at)}</p></div><span className={`rounded-full px-2.5 py-1 text-xs ${incident.status === "open" ? "bg-rose-400/10 text-rose-300" : "bg-emerald-400/10 text-emerald-300"}`}>{incident.status === "open" ? "Open" : "Resolved"}</span></div>
+                  {incident.summary && <p className="mt-3 text-sm leading-5 text-zinc-400">{incident.summary}</p>}
+                  {incident.resolved_at && <p className="mt-2 text-xs text-zinc-500">Resolved {formatDate(incident.resolved_at)}</p>}
+                </article>;
+              })}
+            </div>}
           </section>
           <p className="mt-8 text-center text-xs text-zinc-700">TraceStack · Monitor with confidence</p>
         </main>
