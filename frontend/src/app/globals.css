@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
-  --background: #f7f8f5;
-  --foreground: #17211c;
-  --surface: #ffffff;
-  --surface-muted: #f1f3ef;
-  --border: #e1e5df;
-  --accent: #bef264;
-  --accent-foreground: #17211c;
-  --muted: #68716b;
+  color-scheme: dark;
+  --background: #090b0d;
+  --foreground: #f4f4f5;
+  --surface: #0c0f12;
+  --surface-muted: #111518;
+  --border: rgb(255 255 255 / 9%);
+  --accent: #67e8f9;
+  --accent-foreground: #082f49;
+  --muted: #a1a1aa;
 }
 
 @theme inline {
@@ -28,8 +28,8 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-::selection { background: #d9f99d; color: #17211c; }
-:focus-visible { outline: 2px solid #65a30d; outline-offset: 3px; }
+::selection { background: rgb(103 232 249 / 28%); color: #f4f4f5; }
+:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; }
 
 @keyframes ts-fade-up {
   from { opacity: 0; transform: translateY(12px); }
@@ -54,7 +54,7 @@ body {
 .interactive-card {
   transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
 }
-.interactive-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -20px rgb(23 33 28 / 30%); }
+.interactive-card:hover { transform: translateY(-2px); border-color: rgb(103 232 249 / 22%); box-shadow: 0 12px 28px -20px rgb(0 0 0 / 75%); }
 .interactive-control { transition: color .18s ease, background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .interactive-control:active { transform: scale(.98); }
 
