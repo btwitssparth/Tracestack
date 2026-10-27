@@ -15,7 +15,7 @@ python scripts/generate_vapid_keys.py
 
 Configure these backend environment variables:
 - `VAPID_PUBLIC_KEY`: URL-safe base64 public key for the browser Push API.
-- `VAPID_PRIVATE_KEY`: private VAPID key in a format accepted by pywebpush; keep it secret.
+- `VAPID_PRIVATE_KEY`: paste only the PEM block printed between `VAPID_PRIVATE_KEY_PEM_BEGIN` and `VAPID_PRIVATE_KEY_PEM_END`, including the `BEGIN/END PRIVATE KEY` lines; keep it secret.
 - `VAPID_CLAIMS_SUBJECT`: a contact URI such as `mailto:admin@example.com` (protocol contact only; TraceStack does not send email).
 
 Install backend dependencies and apply the new migration:
