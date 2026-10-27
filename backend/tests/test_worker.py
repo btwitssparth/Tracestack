@@ -67,7 +67,7 @@ def test_worker_checks_only_active_due_monitors(monkeypatch):
     monkeypatch.setattr(worker, "SessionLocal", TestingSessionLocal)
     checked_ids = []
 
-    def fake_perform_check(db, monitor):
+    def fake_perform_check(db, monitor, *, claim_token=None):
         checked_ids.append(monitor.id)
         monitor.next_check_at = datetime.now(timezone.utc) + timedelta(seconds=300)
         db.commit()
@@ -152,7 +152,7 @@ def test_worker_claims_monitor_before_check_and_skips_it_until_next_schedule(mon
         monkeypatch.setattr(worker, "SessionLocal", TestingSessionLocal)
         observed_claims = []
 
-        def fake_perform_check(db, monitor):
+        def fake_perform_check(db, monitor, *, claim_token=None):
             claimed_time = monitor.next_check_at
             if claimed_time.tzinfo is None:
                 claimed_time = claimed_time.replace(tzinfo=timezone.utc)
@@ -165,7 +165,7 @@ def test_worker_claims_monitor_before_check_and_skips_it_until_next_schedule(mon
 
         assert worker.run_due_checks() == 1
         assert observed_claims == [True]
-        # The committed claim/schedule means a second worker pass won't select it.
+        # The updated schedule means a second worker pass won't select it.
         assert worker.run_due_checks() == 0
         assert observed_claims == [True]
 
@@ -220,7 +220,7 @@ def test_worker_claims_are_conditional_on_monitor_still_being_due(monkeypatch):
             db.commit()
 
         called = []
-        monkeypatch.setattr(worker, "perform_check", lambda db, monitor: called.append(monitor.id))
+        monkeypatch.setattr(worker, "perform_check", lambda db, monitor, *, claim_token=None: called.append(monitor.id))
         assert worker.run_due_checks() == 0
         assert called == []
     finally:
