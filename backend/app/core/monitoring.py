@@ -10,13 +10,17 @@ from app.models import CheckResult, Incident, Monitor, Notification
 from app.core.notifications import dispatch_web_push
 
 
-def perform_check(db: Session, monitor: Monitor) -> CheckResult:
-    """Check one monitor, persist the result, and update its incident state.
+class CheckClaimLost(RuntimeError):
+    """Raised when a check's claim expired or was replaced before persistence."""
 
-    The caller should hold a row lock for this monitor (PostgreSQL FOR UPDATE) to
-    serialize overlapping manual checks. Scheduled workers should claim due monitors
-    separately rather than keeping a transaction open during the network request.
-    """
+
+def perform_check(db: Session, monitor: Monitor, *, claim_token: str | None = None) -> CheckResult:
+    """Run HTTP outside a transaction and persist only while the claim is still owned."""
+    monitor_id = monitor.id
+    monitor_url = monitor.url
+    timeout_seconds = monitor.timeout_seconds
+    expected_status_code = monitor.expected_status_code
+    check_interval_seconds = monitor.check_interval_seconds
     now = datetime.now(timezone.utc)
     started = perf_counter()
     status_code: int | None = None
@@ -24,15 +28,15 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
     error_message: str | None = None
 
     try:
-        validate_public_http_url(monitor.url)
-        timeout = httpx.Timeout(float(monitor.timeout_seconds))
+        validate_public_http_url(monitor_url)
+        timeout = httpx.Timeout(float(timeout_seconds))
         with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
-            response = client.get(monitor.url, headers={"User-Agent": "TraceStack-Monitor/0.1"})
+            response = client.get(monitor_url, headers={"User-Agent": "TraceStack-Monitor/0.1"})
             status_code = response.status_code
-        success = status_code == monitor.expected_status_code
+        success = status_code == expected_status_code
         if not success:
             error_type = "unexpected_status"
-            error_message = f"Expected HTTP {monitor.expected_status_code}, received HTTP {status_code}."
+            error_message = f"Expected HTTP {expected_status_code}, received HTTP {status_code}."
     except UnsafeTargetError as exc:
         success = False
         error_type = "unsafe_target"
@@ -40,7 +44,7 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
     except httpx.TimeoutException:
         success = False
         error_type = "timeout"
-        error_message = f"Request exceeded the {monitor.timeout_seconds}-second timeout."
+        error_message = f"Request exceeded the {timeout_seconds}-second timeout."
     except httpx.RequestError:
         success = False
         error_type = "connection_error"
@@ -54,8 +58,19 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
     elapsed_ms = round((perf_counter() - started) * 1000, 2)
     notification: Notification | None = None
 
+    if claim_token is not None:
+        # End the read transaction and re-read under a row lock before persisting.
+        # If the lease was reclaimed, discard this stale result and all state changes.
+        db.rollback()
+        monitor = db.scalar(
+            select(Monitor).where(Monitor.id == monitor_id).with_for_update()
+        )
+        if monitor is None or monitor.check_claim_token != claim_token or not monitor.is_active:
+            db.rollback()
+            raise CheckClaimLost(f"Check claim was lost for monitor_id={monitor_id}")
+
     result = CheckResult(
-        monitor_id=monitor.id,
+        monitor_id=monitor_id,
         checked_at=now,
         success=success,
         status_code=status_code,
@@ -66,7 +81,10 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
     db.add(result)
 
     monitor.last_checked_at = now
-    monitor.next_check_at = now + timedelta(seconds=monitor.check_interval_seconds)
+    monitor.next_check_at = now + timedelta(seconds=check_interval_seconds)
+    if claim_token is not None:
+        monitor.check_claim_token = None
+        monitor.check_claim_expires_at = None
 
     if success:
         monitor.current_status = "up"
