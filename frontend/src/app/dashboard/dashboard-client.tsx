@@ -108,7 +108,7 @@ export default function DashboardClient({ email }: { email: string }) {
   useEffect(() => {
     void loadMonitors(); void loadIncidents(); void loadNotifications();
     const timer = window.setInterval(() => {
-      void loadNotifications(); void loadMonitors(); void loadIncidents();
+      void loadNotifications();
     }, 30000);
     return () => window.clearInterval(timer);
   }, [loadMonitors, loadIncidents, loadNotifications]);
