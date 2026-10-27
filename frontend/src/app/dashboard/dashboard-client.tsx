@@ -54,6 +54,8 @@ export default function DashboardClient({ email }: { email: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [monitorQuery, setMonitorQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "up" | "down" | "paused" | "pending">("all");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -197,6 +199,16 @@ export default function DashboardClient({ email }: { email: string }) {
     paused: monitors.filter((m) => !m.is_active).length,
   }), [monitors]);
 
+  const filteredMonitors = useMemo(() => {
+    const query = monitorQuery.trim().toLowerCase();
+    return monitors.filter((monitor) => {
+      const status = !monitor.is_active ? "paused" : monitor.current_status === "up" ? "up" : monitor.current_status === "down" ? "down" : "pending";
+      const matchesStatus = statusFilter === "all" || status === statusFilter;
+      const matchesQuery = !query || monitor.name.toLowerCase().includes(query) || monitor.url.toLowerCase().includes(query);
+      return matchesStatus && matchesQuery;
+    });
+  }, [monitors, monitorQuery, statusFilter]);
+
   async function createMonitor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -277,8 +289,8 @@ export default function DashboardClient({ email }: { email: string }) {
               <p className="mt-2 text-sm text-zinc-500">Keep an eye on availability and catch issues early.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { void loadMonitors(); void loadIncidents(); }} disabled={loading || incidentsLoading} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-50">{loading || incidentsLoading ? "Refreshing…" : "↻ Refresh"}</button>
-              <button onClick={() => { setFormError(""); setShowForm(true); }} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200">＋ Add monitor</button>
+              <button onClick={() => { void loadMonitors(); void loadIncidents(); }} disabled={loading || incidentsLoading} className="interactive-control rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-50">{loading || incidentsLoading ? "Refreshing…" : "↻ Refresh"}</button>
+              <button onClick={() => { setFormError(""); setShowForm(true); }} className="interactive-control rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200">＋ Add monitor</button>
             </div>
           </div>
 
@@ -300,7 +312,21 @@ export default function DashboardClient({ email }: { email: string }) {
           <section id="monitors" className="mt-8 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101316]">
             <div className="flex flex-col gap-3 border-b border-white/[0.07] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div><h2 className="font-semibold">All monitors</h2><p className="mt-1 text-sm text-zinc-500">Your endpoints and their latest known status.</p></div>
-              <span className="w-fit rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-400">{stats.total} total</span>
+              <span className="w-fit rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-400">{filteredMonitors.length} of {stats.total} monitors</span>
+            </div>
+            <div className="grid gap-3 border-b border-white/[0.06] p-4 sm:grid-cols-[minmax(0,1fr)_190px] sm:px-5">
+              <label className="flex items-center gap-3 rounded-xl border border-white/[0.1] bg-black/20 px-3.5 focus-within:border-cyan-300/50">
+                <span aria-hidden="true" className="text-zinc-500">⌕</span>
+                <span className="sr-only">Search monitors</span>
+                <input value={monitorQuery} onChange={(event) => setMonitorQuery(event.target.value)} placeholder="Search by name or URL…" className="min-w-0 flex-1 bg-transparent py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600" />
+                {monitorQuery && <button type="button" onClick={() => setMonitorQuery("")} aria-label="Clear search" className="text-xs text-zinc-500 hover:text-white">Clear</button>}
+              </label>
+              <label className="flex items-center gap-3 rounded-xl border border-white/[0.1] bg-black/20 px-3.5">
+                <span className="text-xs text-zinc-500">Status</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="min-w-0 flex-1 bg-transparent py-3 text-sm text-zinc-100 outline-none">
+                  <option value="all">All statuses</option><option value="up">Operational</option><option value="down">Down</option><option value="pending">Pending</option><option value="paused">Paused</option>
+                </select>
+              </label>
             </div>
             {error && <div role="alert" className="m-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.06] p-4 text-sm text-rose-200">{error}<button onClick={() => void loadMonitors()} className="ml-3 underline">Try again</button></div>}
             {loading ? <div className="p-12 text-center text-sm text-zinc-500">Loading your monitors…</div> :
@@ -316,11 +342,11 @@ export default function DashboardClient({ email }: { email: string }) {
                   <table className="w-full min-w-[760px] text-left text-sm">
                     <thead className="bg-white/[0.02] text-xs uppercase tracking-wider text-zinc-600"><tr><th className="px-6 py-4 font-medium">Monitor</th><th className="px-6 py-4 font-medium">Status</th><th className="px-6 py-4 font-medium">Interval</th><th className="px-6 py-4 font-medium">Last checked</th><th className="px-6 py-4 font-medium">Expected</th></tr></thead>
                     <tbody className="divide-y divide-white/[0.06]">
-                      {monitors.map((monitor) => {
+                      {filteredMonitors.map((monitor) => {
                         const status = statusLabel(monitor);
                         const tone = status === "Operational" ? "bg-emerald-400/10 text-emerald-300" : status === "Down" ? "bg-rose-400/10 text-rose-300" : "bg-amber-300/10 text-amber-200";
                         return <tr key={monitor.id} className="transition hover:bg-white/[0.02]">
-                          <td className="px-6 py-4"><a href={`/dashboard/monitors/${monitor.id}`} className="font-medium text-zinc-200 transition hover:text-lime-300 hover:underline">{monitor.name} ↗</a><p className="mt-1 max-w-sm truncate text-xs text-zinc-500">{monitor.url}</p></td>
+                          <td className="px-6 py-4"><a href={`/dashboard/monitors/${monitor.id}`} className="font-medium text-zinc-200 transition hover:text-cyan-200 hover:underline">{monitor.name} ↗</a><p className="mt-1 max-w-sm truncate text-xs text-zinc-500">{monitor.url}</p></td>
                           <td className="px-6 py-4"><span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ${tone}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status}</span></td>
                           <td className="px-6 py-4 text-zinc-400">{Math.round(monitor.check_interval_seconds / 60)} min</td>
                           <td className="px-6 py-4 text-zinc-500">{formatDate(monitor.last_checked_at)}</td>
@@ -329,6 +355,7 @@ export default function DashboardClient({ email }: { email: string }) {
                       })}
                     </tbody>
                   </table>
+                  {filteredMonitors.length === 0 && <div className="px-6 py-12 text-center"><p className="text-sm font-medium text-zinc-300">No matching monitors</p><p className="mt-2 text-sm text-zinc-500">Try another search or status filter.</p><button type="button" onClick={() => { setMonitorQuery(""); setStatusFilter("all"); }} className="mt-4 text-sm font-medium text-cyan-300 hover:text-cyan-200">Clear filters</button></div>}
                 </div>
               )}
           </section>
