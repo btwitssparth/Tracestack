@@ -228,7 +228,7 @@ export default function DashboardClient({ email }: { email: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#090b0d] text-zinc-100">
+    <div className="animate-fade-in min-h-screen bg-[#090b0d] text-zinc-100">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-white/[0.08] bg-[#0c0f12] px-5 py-6 lg:flex">
         <a href="/dashboard" className="flex items-center gap-3 px-2 text-lg font-bold tracking-wide text-cyan-300">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300/10 text-sm">TS</span>
@@ -289,7 +289,7 @@ export default function DashboardClient({ email }: { email: string }) {
               { label: "Down", value: stats.down, note: "Needs your attention", icon: "!" },
               { label: "Paused", value: stats.paused, note: "Checks temporarily disabled", icon: "Ⅱ" },
             ].map((card, index) => (
-              <article key={card.label} className="rounded-2xl border border-white/[0.08] bg-[#101316] p-5">
+              <article key={card.label} className="interactive-card rounded-2xl border border-white/[0.08] bg-[#101316] p-5">
                 <div className="flex items-center justify-between"><span className="text-sm text-zinc-400">{card.label}</span><span className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm ${index === 2 ? "bg-rose-400/10 text-rose-300" : "bg-cyan-300/10 text-cyan-200"}`}>{card.icon}</span></div>
                 <p className="mt-5 text-3xl font-semibold tracking-tight">{loading ? "—" : card.value}</p>
                 <p className="mt-2 text-xs text-zinc-600">{card.note}</p>
