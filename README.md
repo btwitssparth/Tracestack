@@ -6,6 +6,13 @@ TraceStack monitors public HTTP endpoints and records incidents.
 
 In-app notifications are stored in PostgreSQL and appear in the dashboard. Browser push notifications use the Web Push protocol and require VAPID keys on the backend.
 
+Generate a VAPID key pair locally (the script prints the keys; do not commit or share the private key):
+
+```bash
+cd backend
+python scripts/generate_vapid_keys.py
+```
+
 Configure these backend environment variables:
 - `VAPID_PUBLIC_KEY`: URL-safe base64 public key for the browser Push API.
 - `VAPID_PRIVATE_KEY`: private VAPID key in a format accepted by pywebpush; keep it secret.
