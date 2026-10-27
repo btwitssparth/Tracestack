@@ -80,13 +80,13 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-950 px-5 py-12 text-neutral-100">
-      <section className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl">
+    <main className="flex min-h-screen items-center justify-center bg-[#090b0d] px-5 py-12 text-zinc-100">
+      <section className="w-full max-w-md animate-fade-up rounded-2xl border border-white/[0.09] bg-[#0c0f12] p-8 shadow-2xl">
         <a href="/" className="text-sm font-semibold tracking-wide text-cyan-400">TRACESTACK</a>
         <h1 className="mt-7 text-3xl font-semibold tracking-tight">
           {mode === "login" ? "Welcome back" : "Create your account"}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-neutral-400">
+        <p className="mt-2 text-sm leading-6 text-zinc-400">
           {mode === "login"
             ? "Sign in to monitor your endpoints and investigate incidents."
             : "Create an account to start monitoring your endpoints."}
@@ -94,7 +94,7 @@ export default function LoginPage() {
 
         <div className="mt-7 grid grid-cols-2 gap-3">
           <button type="button" onClick={() => void handleSocialAuth("google")} disabled={busy}
-            className="rounded-lg border border-neutral-700 px-3 py-3 text-sm font-medium hover:bg-neutral-800 disabled:opacity-50">
+            className="rounded-lg border border-white/[0.12] px-3 py-3 text-sm font-medium hover:bg-white/[0.06] disabled:opacity-50">
             Continue with Google
           </button>
           <button type="button" onClick={() => void handleSocialAuth("github")} disabled={busy}
@@ -103,14 +103,14 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-widest text-neutral-500">
+        <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-widest text-zinc-500">
           <span className="h-px flex-1 bg-neutral-800" />
           or continue with email
           <span className="h-px flex-1 bg-neutral-800" />
         </div>
 
         <form onSubmit={handleEmailAuth} className="space-y-4">
-          <label className="block text-sm text-neutral-300">
+          <label className="block text-sm text-zinc-300">
             Email address
             <input
               type="email"
@@ -118,7 +118,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-3 text-neutral-100 outline-none focus:border-cyan-500"
+              className="mt-2 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-3 text-neutral-100 outline-none focus:border-cyan-300/60"
               placeholder="you@example.com"
             />
           </label>
@@ -136,7 +136,7 @@ export default function LoginPage() {
             />
           </label>
           <button type="submit" disabled={busy}
-            className="w-full rounded-lg bg-cyan-400 px-4 py-3 font-semibold text-neutral-950 hover:bg-cyan-300 disabled:opacity-50">
+            className="w-full rounded-lg bg-cyan-300 px-4 py-3 font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-50">
             {busy ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
