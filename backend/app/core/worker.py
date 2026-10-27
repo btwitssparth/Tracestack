@@ -1,17 +1,13 @@
-"""Polling worker that claims due monitors before performing network checks.
-
-The MVP worker can run in more than one API process without two workers
-claiming the same due schedule at once. The claim is a short database update;
-network I/O happens after the claim transaction has been committed.
-"""
+"""Polling worker that uses shared expiring claims for monitor checks."""
 import logging
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.monitoring import perform_check
+from app.core.check_claims import claim_monitor_check, release_monitor_claim
+from app.core.monitoring import CheckClaimLost, perform_check
 from app.db.session import SessionLocal
 from app.models import Monitor
 
@@ -19,16 +15,13 @@ logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 10
 BATCH_SIZE = 20
-# The API caps monitor timeouts at 30 seconds. This lease leaves a small buffer
-# if a process crashes after claiming a monitor but before persisting its check.
 CLAIM_LEASE_SECONDS = 40
 SHUTDOWN_TIMEOUT_SECONDS = 35
 
 
 def run_due_checks() -> int:
-    """Claim due monitors atomically, then check them outside the claim transaction."""
+    """Find due monitors, claim each atomically, and check without holding a DB lock."""
     now = datetime.now(timezone.utc)
-
     with SessionLocal() as db:
         monitor_ids = list(
             db.scalars(
@@ -44,42 +37,23 @@ def run_due_checks() -> int:
 
     attempted = 0
     for monitor_id in monitor_ids:
-        # Conditional UPDATE is the claim: only one concurrent worker can move
-        # this still-due schedule into the lease window. Commit before HTTP I/O.
-        claim_time = datetime.now(timezone.utc)
-        lease_until = claim_time + timedelta(seconds=CLAIM_LEASE_SECONDS)
         with SessionLocal() as db:
             try:
-                claim = db.execute(
-                    update(Monitor)
-                    .where(
-                        Monitor.id == monitor_id,
-                        Monitor.is_active.is_(True),
-                        Monitor.next_check_at <= claim_time,
-                    )
-                    .values(next_check_at=lease_until)
+                claim = claim_monitor_check(
+                    db, monitor_id, scheduled=True, lease_seconds=CLAIM_LEASE_SECONDS
                 )
-                if claim.rowcount != 1:
-                    db.rollback()
-                    continue
-                db.commit()
             except SQLAlchemyError:
-                db.rollback()
                 logger.exception("Could not claim monitor_id=%s", monitor_id)
                 continue
+        if claim is None:
+            continue
 
-        # The lease prevents other scheduled workers from claiming this monitor
-        # while the endpoint is checked. No row lock/transaction is held over HTTP.
         with SessionLocal() as db:
             try:
-                monitor = db.scalar(
-                    select(Monitor).where(Monitor.id == monitor_id)
-                )
-                if monitor is None or not monitor.is_active:
-                    db.rollback()
+                monitor = db.scalar(select(Monitor).where(Monitor.id == monitor_id))
+                if monitor is None:
                     continue
-
-                result = perform_check(db, monitor)
+                result = perform_check(db, monitor, claim_token=claim.token)
                 attempted += 1
                 logger.info(
                     "Monitor check completed",
@@ -90,12 +64,21 @@ def run_due_checks() -> int:
                         "response_time_ms": result.response_time_ms,
                     },
                 )
+            except CheckClaimLost:
+                logger.info("Discarded stale check result for monitor_id=%s", monitor_id)
             except SQLAlchemyError:
                 db.rollback()
                 logger.exception("Database error while checking monitor_id=%s", monitor_id)
             except Exception:
                 db.rollback()
                 logger.exception("Unexpected error while checking monitor_id=%s", monitor_id)
+            finally:
+                # Safe if perform_check already cleared it; token matching prevents
+                # this cleanup from releasing a newer worker's claim.
+                try:
+                    release_monitor_claim(db, claim)
+                except SQLAlchemyError:
+                    logger.exception("Could not release claim for monitor_id=%s", monitor_id)
 
     return attempted
 
