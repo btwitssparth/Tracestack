@@ -27,7 +27,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-7xl items-center gap-14 px-6 pb-24 pt-16 lg:grid-cols-[1.02fr_.98fr] lg:px-10 lg:pb-32 lg:pt-24">
+      <section className="animate-fade-up mx-auto grid max-w-7xl items-center gap-14 px-6 pb-24 pt-16 lg:grid-cols-[1.02fr_.98fr] lg:px-10 lg:pb-32 lg:pt-24">
         <div>
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/[0.09] bg-[#0c0f12] px-3.5 py-2 text-xs font-semibold text-zinc-400 shadow-sm">
             <span className="h-2 w-2 rounded-full bg-cyan-300" /> Website and API monitoring
@@ -43,7 +43,7 @@ export default function Home() {
 
         <div className="relative">
           <div className="absolute -inset-5 rounded-[2rem] bg-cyan-300/10 blur-3xl" aria-hidden="true" />
-          <div className="relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0c0f12] shadow-[0_24px_80px_-35px_rgba(0,0,0,0.8)]">
+          <div className="interactive-card relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0c0f12] shadow-[0_24px_80px_-35px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
               <div className="flex items-center gap-2"><Mark className="h-7 w-7 rounded-lg text-xs" /><span className="text-sm font-semibold">Workspace overview</span></div>
               <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">Monitor view</span>
@@ -69,14 +69,14 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-6 py-20 lg:px-10 lg:py-24">
           <div className="max-w-2xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">One clear view</p><h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">The signals you need. Without the noise.</h2><p className="mt-4 leading-7 text-zinc-400">From a failed check to a recovered service, keep the important details close at hand.</p></div>
           <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/[0.09] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-4">
-            {features.map((feature) => <article key={feature.number} className="bg-[#0c0f12] p-6 transition hover:bg-[#fbfcf8] sm:p-7"><p className="text-xs font-semibold text-zinc-500">{feature.number}</p><h3 className="mt-8 text-lg font-semibold">{feature.title}</h3><p className="mt-3 text-sm leading-6 text-zinc-400">{feature.description}</p></article>)}
+            {features.map((feature) => <article key={feature.number} className="interactive-card bg-[#0c0f12] p-6 sm:p-7"><p className="text-xs font-semibold text-zinc-500">{feature.number}</p><h3 className="mt-8 text-lg font-semibold">{feature.title}</h3><p className="mt-3 text-sm leading-6 text-zinc-400">{feature.description}</p></article>)}
           </div>
         </div>
       </section>
 
       <section id="workflow" className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-2 lg:items-center lg:px-10 lg:py-24">
         <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">A simpler workflow</p><h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">From endpoint to insight in a few steps.</h2><p className="mt-4 max-w-lg leading-7 text-zinc-400">TraceStack brings monitoring results and incident context together so you can spend less time piecing together what happened.</p></div>
-        <div className="space-y-3">{[{ n: "01", title: "Add your endpoint", body: "Choose a URL and configure the expected response." },{ n: "02", title: "Watch checks run", body: "Review recorded outcomes, status codes, and response times." },{ n: "03", title: "Investigate and improve", body: "Use incident history and analytics to understand service health." }].map((step) => <div key={step.n} className="flex gap-5 rounded-xl border border-white/[0.09] bg-[#0c0f12] p-5"><span className="pt-0.5 text-sm font-semibold text-zinc-500">{step.n}</span><div><h3 className="font-semibold">{step.title}</h3><p className="mt-1 text-sm leading-6 text-zinc-400">{step.body}</p></div></div>)}</div>
+        <div className="space-y-3">{[{ n: "01", title: "Add your endpoint", body: "Choose a URL and configure the expected response." },{ n: "02", title: "Watch checks run", body: "Review recorded outcomes, status codes, and response times." },{ n: "03", title: "Investigate and improve", body: "Use incident history and analytics to understand service health." }].map((step) => <div key={step.n} className="interactive-card flex gap-5 rounded-xl border border-white/[0.09] bg-[#0c0f12] p-5"><span className="pt-0.5 text-sm font-semibold text-zinc-500">{step.n}</span><div><h3 className="font-semibold">{step.title}</h3><p className="mt-1 text-sm leading-6 text-zinc-400">{step.body}</p></div></div>)}</div>
       </section>
 
       <section className="mx-6 mb-8 rounded-2xl bg-[#0c0f12] px-6 py-14 text-white sm:px-10 lg:mx-auto lg:max-w-7xl lg:px-14 lg:py-16">
