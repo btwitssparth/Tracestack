@@ -11,6 +11,7 @@ from app.core.worker import MonitoringWorker
 from app.db.session import engine
 from app.routers.incidents import router as incidents_router
 from app.routers.monitors import router as monitors_router
+from app.routers.notifications import router as notifications_router
 
 monitoring_worker = MonitoringWorker()
 
@@ -69,3 +70,4 @@ def database_health_check() -> dict[str, str]:
 
 app.include_router(monitors_router, prefix="/api/v1")
 app.include_router(incidents_router, prefix="/api/v1")
+app.include_router(notifications_router, prefix="/api/v1")

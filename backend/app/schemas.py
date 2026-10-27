@@ -111,3 +111,39 @@ class IncidentRead(BaseModel):
     resolved_at: datetime | None
     failure_count_at_open: int
     summary: str | None
+
+
+class NotificationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    monitor_id: int
+    incident_id: int | None
+    type: Literal["monitor_down", "monitor_recovered"]
+    title: str
+    message: str
+    is_read: bool
+    created_at: datetime
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str = Field(min_length=1, max_length=512)
+    auth: str = Field(min_length=1, max_length=512)
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)
+    keys: PushSubscriptionKeys
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("Push endpoint must be an absolute HTTPS URL")
+        if parsed.username or parsed.password:
+            raise ValueError("Push endpoint credentials are not allowed")
+        return value
+
+
+class PushSubscriptionDelete(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)

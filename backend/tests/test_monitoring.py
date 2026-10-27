@@ -135,3 +135,20 @@ def test_unexpected_status_is_success_only_when_it_matches_expected(db_session, 
 
     assert result.success is True
     assert result.status_code == 204
+
+
+def test_incident_transitions_create_user_notifications(db_session, monitor, monkeypatch):
+    from app.models import Notification
+    install_http_mock(monkeypatch, status_code=503)
+    run_check(db_session, monitor)
+    run_check(db_session, monitor)
+    notifications = list(db_session.scalars(select(Notification)).all())
+    assert len(notifications) == 1
+    assert notifications[0].owner_id == monitor.owner_id
+    assert notifications[0].type == "monitor_down"
+    assert notifications[0].incident_id is not None
+    install_http_mock(monkeypatch, status_code=200)
+    run_check(db_session, monitor)
+    run_check(db_session, monitor)
+    notifications = list(db_session.scalars(select(Notification).order_by(Notification.id)).all())
+    assert [item.type for item in notifications] == ["monitor_down", "monitor_recovered"]

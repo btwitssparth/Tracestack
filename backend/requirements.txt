@@ -7,3 +7,4 @@ pytest
 python-dotenv
 sqlalchemy
 uvicorn[standard]
+pywebpush

@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.url_security import UnsafeTargetError, validate_public_http_url
-from app.models import CheckResult, Incident, Monitor
+from app.models import CheckResult, Incident, Monitor, Notification
+from app.core.notifications import dispatch_web_push
 
 
 def perform_check(db: Session, monitor: Monitor) -> CheckResult:
@@ -51,6 +52,8 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
         error_message = "The check failed because of an unexpected internal error."
 
     elapsed_ms = round((perf_counter() - started) * 1000, 2)
+    notification: Notification | None = None
+
     result = CheckResult(
         monitor_id=monitor.id,
         checked_at=now,
@@ -80,6 +83,13 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
                 incident.status = "resolved"
                 incident.resolved_at = now
                 incident.summary = "Endpoint recovered after two consecutive successful checks."
+                if monitor.owner_id:
+                    notification = Notification(
+                        owner_id=monitor.owner_id, monitor_id=monitor.id, incident_id=incident.id,
+                        type="monitor_recovered", title=f"{monitor.name} recovered",
+                        message=f"{monitor.url} is responding normally again.",
+                    )
+                    db.add(notification)
     else:
         monitor.current_status = "down"
         monitor.consecutive_failures += 1
@@ -91,18 +101,29 @@ def perform_check(db: Session, monitor: Monitor) -> CheckResult:
                 .limit(1)
             )
             if open_incident is None:
-                db.add(
-                    Incident(
-                        monitor_id=monitor.id,
-                        title=f"{monitor.name} is failing",
-                        status="open",
-                        started_at=now,
-                        failure_count_at_open=monitor.consecutive_failures,
-                        summary=error_message or "The endpoint did not return the expected status.",
-                    )
+                incident = Incident(
+                    monitor_id=monitor.id, title=f"{monitor.name} is failing", status="open",
+                    started_at=now, failure_count_at_open=monitor.consecutive_failures,
+                    summary=error_message or "The endpoint did not return the expected status.",
                 )
+                db.add(incident)
+                db.flush()
+                if monitor.owner_id:
+                    notification = Notification(
+                        owner_id=monitor.owner_id, monitor_id=monitor.id, incident_id=incident.id,
+                        type="monitor_down", title=f"{monitor.name} is down",
+                        message=error_message or f"{monitor.url} failed its health check.",
+                    )
+                    db.add(notification)
 
     db.add(monitor)
     db.commit()
     db.refresh(result)
+    if notification is not None:
+        db.refresh(notification)
+        try:
+            dispatch_web_push(db, notification)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Web push dispatch failed for notification_id=%s", notification.id)
     return result
