@@ -8,7 +8,7 @@ const features = [
 ];
 
 function Mark({ className = "" }: { className?: string }) {
-  return <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300 text-sm font-black tracking-tight text-zinc-100 ${className}`}>T.</span>;
+  return <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300 text-sm font-black tracking-tight text-zinc-950 ${className}`}>T.</span>;
 }
 
 export default function Home() {
@@ -23,7 +23,7 @@ export default function Home() {
         </nav>
         <div className="flex items-center gap-3">
           <Link href="/login" className="hidden rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:bg-white/[0.08] sm:inline-flex">Sign in</Link>
-          <Link href="/login" className="rounded-lg bg-[#0c0f12] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08]">Get started <span aria-hidden="true">↗</span></Link>
+          <Link href="/login" className="rounded-lg bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200">Get started <span aria-hidden="true">↗</span></Link>
         </div>
       </header>
 
@@ -35,8 +35,8 @@ export default function Home() {
           <h1 className="max-w-2xl text-5xl font-semibold leading-[1.04] tracking-[-0.055em] sm:text-6xl lg:text-7xl">Know when your services go down.<span className="text-zinc-500"> Before your users tell you.</span></h1>
           <p className="mt-7 max-w-xl text-lg leading-8 text-zinc-400">Monitor uptime, follow incidents, and understand response-time trends from one calm, focused workspace.</p>
           <div className="mt-9 flex flex-wrap items-center gap-4">
-            <Link href="/login" className="inline-flex items-center gap-3 rounded-xl bg-[#0c0f12] px-6 py-4 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-white/[0.08]">Start monitoring <span aria-hidden="true">→</span></Link>
-            <a href="#features" className="rounded-xl border border-white/[0.14] bg-[#0c0f12] px-6 py-4 text-sm font-semibold transition hover:border-white/30">Explore features</a>
+            <Link href="/login" className="inline-flex items-center gap-3 interactive-control rounded-xl bg-cyan-300 px-6 py-4 text-sm font-semibold text-zinc-950 shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-200">Start monitoring <span aria-hidden="true">→</span></Link>
+            <a href="#features" className="interactive-control rounded-xl border border-white/[0.14] bg-transparent px-6 py-4 text-sm font-semibold transition hover:border-cyan-300/50 hover:bg-white/[0.03]">Explore features</a>
           </div>
           <p className="mt-5 text-xs text-zinc-500">Simple setup. Clear signals. Less guesswork.</p>
         </div>
@@ -80,7 +80,7 @@ export default function Home() {
       </section>
 
       <section className="mx-6 mb-8 rounded-2xl bg-[#0c0f12] px-6 py-14 text-white sm:px-10 lg:mx-auto lg:max-w-7xl lg:px-14 lg:py-16">
-        <div className="flex flex-col justify-between gap-8 sm:flex-row sm:items-center"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Make the next outage less surprising</p><h2 className="mt-4 max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">Your services deserve a clearer signal.</h2></div><Link href="/login" className="inline-flex shrink-0 items-center justify-center gap-3 rounded-xl bg-cyan-300 px-6 py-4 text-sm font-bold text-zinc-100 transition hover:bg-cyan-200">Get started <span aria-hidden="true">→</span></Link></div>
+        <div className="flex flex-col justify-between gap-8 sm:flex-row sm:items-center"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Make the next outage less surprising</p><h2 className="mt-4 max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">Your services deserve a clearer signal.</h2></div><Link href="/login" className="inline-flex shrink-0 items-center justify-center gap-3 interactive-control rounded-xl bg-cyan-300 px-6 py-4 text-sm font-bold text-zinc-950 transition hover:bg-cyan-200">Get started <span aria-hidden="true">→</span></Link></div>
       </section>
       <footer className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between lg:px-10"><Link href="/" className="flex items-center gap-2 font-semibold text-zinc-200"><Mark className="h-7 w-7 rounded-lg text-xs" />TraceStack</Link><p>Website and API monitoring, made easier to understand.</p><div className="flex gap-5"><Link href="/login" className="hover:text-white">Sign in</Link><a href="https://github.com/btwitssparth/Tracestack" target="_blank" rel="noreferrer" className="hover:text-white">GitHub ↗</a></div></footer>
     </main>
