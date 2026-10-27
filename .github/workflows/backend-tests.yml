@@ -31,5 +31,5 @@ jobs:
 
       - name: Run automated backend tests
         env:
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
         run: python -m pytest -q
