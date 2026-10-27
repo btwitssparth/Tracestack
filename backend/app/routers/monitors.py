@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_authenticated_user
-from app.core.monitoring import perform_check
+from app.core.check_claims import claim_monitor_check, release_monitor_claim
+from app.core.monitoring import CheckClaimLost, perform_check
 from app.core.url_security import UnsafeTargetError, validate_public_http_url
 from app.dependencies import get_db
 from app.models import CheckResult, Monitor
@@ -121,10 +122,31 @@ def run_manual_check(
     user: dict[str, Any] = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ) -> CheckResult:
-    monitor = _owned_monitor(db, monitor_id, user["sub"], lock=True)
+    monitor = _owned_monitor(db, monitor_id, user["sub"])
     if not monitor.is_active:
         raise HTTPException(status_code=409, detail="Monitor is paused")
-    return perform_check(db, monitor)
+
+    try:
+        claim = claim_monitor_check(db, monitor_id, scheduled=False)
+    except Exception:
+        db.rollback()
+        raise
+    if claim is None:
+        # Distinguish a pause from another check already owning the lease.
+        db.refresh(monitor)
+        if not monitor.is_active:
+            raise HTTPException(status_code=409, detail="Monitor is paused")
+        raise HTTPException(status_code=409, detail="A check is already in progress")
+
+    try:
+        monitor = db.scalar(select(Monitor).where(Monitor.id == monitor_id))
+        if monitor is None:
+            raise HTTPException(status_code=404, detail="Monitor not found")
+        return perform_check(db, monitor, claim_token=claim.token)
+    except CheckClaimLost as exc:
+        raise HTTPException(status_code=409, detail="The check claim expired; please retry") from exc
+    finally:
+        release_monitor_claim(db, claim)
 
 
 @router.get("/{monitor_id}/checks", response_model=list[CheckResultRead])
