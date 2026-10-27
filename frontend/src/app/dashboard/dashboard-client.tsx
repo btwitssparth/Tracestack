@@ -330,8 +330,8 @@ export default function DashboardClient({ email }: { email: string }) {
               </label>
               <label className="flex items-center gap-3 rounded-xl border border-white/[0.1] bg-black/20 px-3.5">
                 <span className="text-xs text-zinc-500">Status</span>
-                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="min-w-0 flex-1 bg-transparent py-3 text-sm text-zinc-100 outline-none">
-                  <option value="all">All statuses</option><option value="up">Operational</option><option value="down">Down</option><option value="pending">Pending</option><option value="paused">Paused</option>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="min-w-0 flex-1 cursor-pointer appearance-none bg-[#111518] py-3 text-sm text-zinc-100 outline-none focus-visible:outline-cyan-300">
+                  <option className="bg-[#111518] text-zinc-100" value="all">All statuses</option><option className="bg-[#111518] text-zinc-100" value="up">Operational</option><option className="bg-[#111518] text-zinc-100" value="down">Down</option><option className="bg-[#111518] text-zinc-100" value="pending">Pending</option><option className="bg-[#111518] text-zinc-100" value="paused">Paused</option>
                 </select>
               </label>
             </div>
