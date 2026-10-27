@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -212,7 +212,7 @@ def test_worker_claims_are_conditional_on_monitor_still_being_due(monkeypatch):
         # candidate list was read but before this worker tries to claim it.
         with TestingSessionLocal() as db:
             db.execute(
-                worker.update(Monitor)
+                update(Monitor)
                 .where(Monitor.id == monitor_id)
                 .values(next_check_at=datetime.now(timezone.utc) + timedelta(minutes=5))
             )
