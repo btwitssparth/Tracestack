@@ -76,7 +76,7 @@ export default function AnalyticsClient() {
   const chartPoints = [...timedChecks].reverse().slice(-40);
 
   return (
-    <main className="min-h-screen bg-[#090b0d] px-5 py-8 text-zinc-100 sm:px-8">
+    <main className="animate-fade-in min-h-screen bg-[#090b0d] px-5 py-8 text-zinc-100 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -108,10 +108,10 @@ export default function AnalyticsClient() {
               { label: "Average response", value: average === null ? "—" : `${Math.round(average)} ms`, note: "Successful and failed checks with timing" },
               { label: "Successful checks", value: String(successes), note: "Within selected period" },
               { label: "Failed checks", value: String(failures), note: "Within selected period" },
-            ].map((item) => <div key={item.label} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5"><p className="text-sm text-zinc-400">{item.label}</p><p className="mt-3 text-3xl font-semibold tracking-tight">{item.value}</p><p className="mt-2 text-xs text-zinc-600">{item.note}</p></div>)}
+            ].map((item) => <div key={item.label} className="interactive-card rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5"><p className="text-sm text-zinc-400">{item.label}</p><p className="mt-3 text-3xl font-semibold tracking-tight">{item.value}</p><p className="mt-2 text-xs text-zinc-600">{item.note}</p></div>)}
           </section>
 
-          <section className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
+          <section className="interactive-card mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="font-semibold">Response-time trend</h2><p className="mt-1 text-xs text-zinc-500">Latest recorded checks in the selected period</p></div><p className="text-xs text-zinc-500">{timedChecks.length} timed checks</p></div>
             {loadingChecks ? <p className="py-12 text-center text-sm text-zinc-500">Loading check history…</p> : chartPoints.length < 2 ? <p className="py-12 text-center text-sm text-zinc-500">Not enough check history to draw a trend yet.</p> : <div className="mt-6">
               <div className="flex h-44 items-end gap-1 border-b border-l border-white/10 px-2 pt-2">
