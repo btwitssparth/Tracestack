@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 10
 BATCH_SIZE = 20
+# Monitor timeout is constrained to 30 seconds by the API schema. Allow a
+# running check plus one polling interval to finish during graceful shutdown.
+SHUTDOWN_TIMEOUT_SECONDS = 35
 
 
 def run_due_checks() -> int:
@@ -120,6 +123,19 @@ class MonitoringWorker:
 
     def stop(self) -> None:
         self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=POLL_INTERVAL_SECONDS + 5)
-            self._thread = None
+        thread = self._thread
+        if thread is None:
+            return
+
+        thread.join(timeout=SHUTDOWN_TIMEOUT_SECONDS)
+        if thread.is_alive():
+            # Keep the reference so start() cannot create a second worker while
+            # the previous thread is still finishing a slow in-flight check.
+            logger.warning(
+                "Monitoring worker did not stop within %s seconds; "
+                "will not start a replacement while it is still running",
+                SHUTDOWN_TIMEOUT_SECONDS,
+            )
+            return
+
+        self._thread = None
