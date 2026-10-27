@@ -13,6 +13,13 @@ type Incident = {
   summary: string | null;
 };
 
+type NotificationItem = {
+  id: number; monitor_id: number; incident_id: number | null;
+  type: "monitor_down" | "monitor_recovered"; title: string; message: string;
+  is_read: boolean; created_at: string;
+};
+type NotificationConfig = { configured: boolean; public_key: string | null };
+
 type Monitor = {
   id: number;
   name: string;
@@ -49,6 +56,12 @@ export default function DashboardClient({ email }: { email: string }) {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const unreadCount = notifications.filter((item) => !item.is_read).length;
 
   const loadMonitors = useCallback(async () => {
     setLoading(true);
@@ -80,7 +93,102 @@ export default function DashboardClient({ email }: { email: string }) {
     }
   }, []);
 
-  useEffect(() => { void loadMonitors(); void loadIncidents(); }, [loadMonitors, loadIncidents]);
+  const loadNotifications = useCallback(async () => {
+    try {
+      const response = await fetch("/api/notifications?limit=30", { cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || "Could not load notifications.");
+      setNotifications(Array.isArray(body) ? body : []);
+      setNotificationError("");
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : "Could not load notifications.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMonitors(); void loadIncidents(); void loadNotifications();
+    const timer = window.setInterval(() => {
+      void loadNotifications(); void loadMonitors(); void loadIncidents();
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadMonitors, loadIncidents, loadNotifications]);
+
+  async function markNotificationRead(id: number) {
+    const response = await fetch(`/api/notifications/${id}/read`, { method: "PATCH" });
+    if (!response.ok) { setNotificationError("Could not mark notification as read."); return; }
+    setNotifications((current) => current.map((item) => item.id === id ? { ...item, is_read: true } : item));
+  }
+
+  async function markAllNotificationsRead() {
+    const response = await fetch("/api/notifications/read-all", { method: "POST" });
+    if (!response.ok) { setNotificationError("Could not mark notifications as read."); return; }
+    setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
+  }
+
+  function decodeVapidKey(value: string) {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const raw = window.atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  }
+
+  async function toggleWebPush() {
+    setPushBusy(true); setNotificationError("");
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        throw new Error("This browser does not support web push notifications.");
+      }
+      if (Notification.permission === "denied") {
+        throw new Error("Browser notifications are blocked. Allow them in your browser site settings.");
+      }
+      const configResponse = await fetch("/api/notifications/push-config", { cache: "no-store" });
+      const config = await configResponse.json() as NotificationConfig;
+      if (!configResponse.ok || !config.configured || !config.public_key) {
+        throw new Error("Web push is not configured on the TraceStack server yet.");
+      }
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("Allow browser notifications to enable web push.");
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true, applicationServerKey: decodeVapidKey(config.public_key),
+      });
+      const response = await fetch("/api/notifications/push-subscriptions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || "Could not enable web push.");
+      setPushEnabled(true);
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : "Could not enable web push.");
+    } finally { setPushBusy(false); }
+  }
+
+  async function disableWebPush() {
+    setPushBusy(true); setNotificationError("");
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        await fetch("/api/notifications/push-subscriptions", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        await subscription.unsubscribe();
+      }
+      setPushEnabled(false);
+    } catch {
+      setNotificationError("Could not disable web push. Please try again.");
+    } finally { setPushBusy(false); }
+  }
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.getRegistration("/sw.js").then(async (registration) => {
+      const subscription = await registration?.pushManager.getSubscription();
+      setPushEnabled(Boolean(subscription));
+    }).catch(() => setPushEnabled(false));
+  }, []);
 
   const stats = useMemo(() => ({
     total: monitors.length,
@@ -139,7 +247,22 @@ export default function DashboardClient({ email }: { email: string }) {
       <div className="lg:pl-64">
         <header className="flex min-h-[76px] items-center justify-between border-b border-white/[0.08] px-5 sm:px-8">
           <div><p className="text-xs text-zinc-500">Workspace / Overview</p><p className="mt-1 text-sm font-medium text-zinc-200">Monitoring dashboard</p></div>
-          <div className="flex items-center gap-3">
+          <div className="relative flex items-center gap-3">
+            <div className="relative">
+              <button type="button" aria-label={`Notifications, ${unreadCount} unread`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-lg text-zinc-200 transition hover:bg-white/[0.05]">♧
+                {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-400 px-1 text-[10px] font-bold text-zinc-950">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+              </button>
+              {notificationsOpen && <div className="absolute right-0 z-40 mt-3 w-[min(90vw,390px)] overflow-hidden rounded-2xl border border-white/10 bg-[#111518] shadow-2xl">
+                <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3"><div><p className="text-sm font-semibold">Notifications</p><p className="mt-0.5 text-xs text-zinc-500">{unreadCount} unread</p></div><button onClick={() => void markAllNotificationsRead()} className="text-xs text-cyan-200 hover:text-cyan-100">Mark all read</button></div>
+                <div className="max-h-80 overflow-y-auto">
+                  {notificationError && <p role="alert" className="px-4 py-3 text-xs text-rose-200">{notificationError}</p>}
+                  {notifications.length === 0 ? <p className="px-4 py-8 text-center text-sm text-zinc-500">You're all caught up.</p> : notifications.map((item) => <button key={item.id} onClick={() => { void markNotificationRead(item.id); setNotificationsOpen(false); document.getElementById("incidents")?.scrollIntoView({ behavior: "smooth" }); }} className={`block w-full border-b border-white/[0.06] px-4 py-3 text-left transition hover:bg-white/[0.04] ${item.is_read ? "opacity-65" : "bg-cyan-300/[0.035]"}`}>
+                    <span className="flex items-start gap-3"><span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${item.type === "monitor_down" ? "bg-rose-400/10 text-rose-300" : "bg-emerald-400/10 text-emerald-300"}`}>{item.type === "monitor_down" ? "!" : "✓"}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-zinc-200">{item.title}</span><span className="mt-1 block text-xs leading-5 text-zinc-500">{item.message}</span><span className="mt-1 block text-[11px] text-zinc-600">{formatDate(item.created_at)}</span></span>{!item.is_read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />}</span>
+                  </button>)}
+                </div>
+                <div className="border-t border-white/[0.08] p-3"><button disabled={pushBusy} onClick={() => void (pushEnabled ? disableWebPush() : toggleWebPush())} className="w-full rounded-xl border border-white/10 px-3 py-2.5 text-xs font-medium text-zinc-200 transition hover:bg-white/[0.05] disabled:opacity-50">{pushBusy ? "Updating…" : pushEnabled ? "Disable browser notifications" : "Enable browser notifications"}</button><p className="mt-2 text-center text-[11px] leading-4 text-zinc-600">In-app alerts are always on. Browser alerts require permission.</p></div>
+              </div>}
+            </div>
             <span className="hidden max-w-56 truncate text-sm text-zinc-400 sm:block">{email}</span>
             <SignOutButton />
           </div>
