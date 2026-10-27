@@ -153,10 +153,9 @@ def test_worker_claims_monitor_before_check_and_skips_it_until_next_schedule(mon
         observed_claims = []
 
         def fake_perform_check(db, monitor, *, claim_token=None):
-            claimed_time = monitor.next_check_at
-            if claimed_time.tzinfo is None:
-                claimed_time = claimed_time.replace(tzinfo=timezone.utc)
-            observed_claims.append(claimed_time > datetime.now(timezone.utc))
+            observed_claims.append(
+                claim_token is not None and monitor.check_claim_token == claim_token
+            )
             monitor.next_check_at = datetime.now(timezone.utc) + timedelta(seconds=300)
             db.commit()
             return SimpleNamespace(success=True, status_code=200, response_time_ms=8.0)
