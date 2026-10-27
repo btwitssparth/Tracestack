@@ -152,3 +152,26 @@ def test_incident_transitions_create_user_notifications(db_session, monitor, mon
     run_check(db_session, monitor)
     notifications = list(db_session.scalars(select(Notification).order_by(Notification.id)).all())
     assert [item.type for item in notifications] == ["monitor_down", "monitor_recovered"]
+
+
+
+def test_stale_claim_cannot_persist_check_result(db_session, monitor, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    import pytest
+    from app.core.monitoring import CheckClaimLost
+    from app.models import CheckResult, Monitor
+
+    install_http_mock(monkeypatch, status_code=503)
+    monitor.check_claim_token = "new-owner-token"
+    monitor.check_claim_expires_at = datetime.now(timezone.utc) + timedelta(seconds=30)
+    db_session.commit()
+
+    with pytest.raises(CheckClaimLost):
+        monitoring.perform_check(db_session, monitor, claim_token="expired-owner-token")
+
+    assert list(db_session.scalars(select(CheckResult)).all()) == []
+    db_session.refresh(monitor)
+    assert monitor.check_claim_token == "new-owner-token"
+    assert monitor.current_status == "unknown"
+    assert monitor.consecutive_failures == 0
