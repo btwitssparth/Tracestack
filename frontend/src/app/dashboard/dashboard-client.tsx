@@ -249,7 +249,7 @@ export default function DashboardClient({ email }: { email: string }) {
           <div><p className="text-xs text-zinc-500">Workspace / Overview</p><p className="mt-1 text-sm font-medium text-zinc-200">Monitoring dashboard</p></div>
           <div className="relative flex items-center gap-3">
             <div className="relative">
-              <button type="button" aria-label={`Notifications, ${unreadCount} unread`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-lg text-zinc-200 transition hover:bg-white/[0.05]">♧
+              <button type="button" aria-label={`Notifications, ${unreadCount} unread`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-lg text-zinc-200 transition hover:bg-white/[0.05]">🔔
                 {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-400 px-1 text-[10px] font-bold text-zinc-950">{unreadCount > 99 ? "99+" : unreadCount}</span>}
               </button>
               {notificationsOpen && <div className="absolute right-0 z-40 mt-3 w-[min(90vw,390px)] overflow-hidden rounded-2xl border border-white/10 bg-[#111518] shadow-2xl">
