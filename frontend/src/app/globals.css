@@ -1,68 +1,202 @@
 @import "tailwindcss";
 
+@theme {
+  /* Surfaces — deep charcoal with a blue-green undertone */
+  --color-canvas: #101719;
+  --color-nav: #0d1315;
+  --color-panel: #172124;
+  --color-raised: #1c292c;
+  --color-alt: #202e30;
+
+  /* Borders / hairlines */
+  --color-line: #233234;
+  --color-line-strong: #2f4245;
+
+  /* Text */
+  --color-ink: #e9f0ed;
+  --color-muted: #a0b0ab;
+  --color-faint: #73847e;
+
+  /* Accents */
+  --color-accent: #62e6c1;
+  --color-accent-2: #46c9c2;
+
+  /* Semantic status */
+  --color-ok: #56d68f;
+  --color-warn: #f2b13f;
+  --color-crit: #ff6b6b;
+  --color-info: #57c6e6;
+
+  /* Type */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", "Menlo", monospace;
+
+  /* Radius */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 13px;
+  --radius-xl: 16px;
+
+  /* Motion */
+  --ease-out-soft: cubic-bezier(0.22, 0.71, 0.24, 1);
+}
+
 :root {
   color-scheme: dark;
-  --background: #090b0d;
-  --foreground: #f4f4f5;
-  --surface: #0c0f12;
-  --surface-muted: #111518;
-  --border: rgb(255 255 255 / 9%);
-  --accent: #67e8f9;
-  --accent-foreground: #082f49;
-  --muted: #a1a1aa;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
+  border-color: var(--color-line);
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
-::selection { background: rgb(103 232 249 / 28%); color: #f4f4f5; }
-:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; }
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 26%, transparent);
+  color: var(--color-ink);
+}
 
-@keyframes ts-fade-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-@keyframes ts-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes ts-soft-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .55; }
-}
-.animate-fade-up { animation: ts-fade-up .55s cubic-bezier(.2,.7,.2,1) both; }
-.animate-fade-in { animation: ts-fade-in .35s ease-out both; }
-.animate-soft-pulse { animation: ts-soft-pulse 1.8s ease-in-out infinite; }
-.stagger-1 { animation-delay: 70ms; }
-.stagger-2 { animation-delay: 140ms; }
-.stagger-3 { animation-delay: 210ms; }
-.stagger-4 { animation-delay: 280ms; }
 
-.interactive-card {
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+/* Thin, low-contrast scrollbars that fit the console aesthetic */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
 }
-.interactive-card:hover { transform: translateY(-2px); border-color: rgb(103 232 249 / 22%); box-shadow: 0 12px 28px -20px rgb(0 0 0 / 75%); }
-.interactive-control { transition: color .18s ease, background-color .18s ease, border-color .18s ease, transform .18s ease; }
-.interactive-control:active { transform: scale(.98); }
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3c5255;
+  background-clip: content-box;
+}
+
+/* Numeric alignment for operational metrics */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Keyframes */
+@keyframes ts-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ts-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ts-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes ts-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ts-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.animate-rise {
+  animation: ts-rise 0.42s var(--ease-out-soft) both;
+}
+.animate-fade {
+  animation: ts-fade 0.3s ease-out both;
+}
+.animate-live {
+  animation: ts-pulse 2.1s ease-in-out infinite;
+}
+.animate-spin-slow {
+  animation: ts-spin 0.9s linear infinite;
+}
+
+.stagger-1 {
+  animation-delay: 60ms;
+}
+.stagger-2 {
+  animation-delay: 120ms;
+}
+.stagger-3 {
+  animation-delay: 180ms;
+}
+.stagger-4 {
+  animation-delay: 240ms;
+}
+
+/* Skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-ink) 6%, transparent);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color-ink) 7%, transparent),
+    transparent
+  );
+  animation: ts-sheen 1.5s infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
-    animation-duration: .01ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .skeleton::after {
+    display: none;
   }
 }

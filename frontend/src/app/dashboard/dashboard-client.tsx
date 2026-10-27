@@ -1,7 +1,33 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import SignOutButton from "./sign-out-button";
+import Link from "next/link";
+import {
+  Activity,
+  ArrowUpRight,
+  Check,
+  CircleAlert,
+  CircleCheck,
+  CirclePause,
+  Copy,
+  Filter,
+  Globe,
+  Plus,
+  RefreshCw,
+  Search,
+  TriangleAlert,
+  X,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { Badge, type Tone } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field, Input, Select } from "@/components/ui/field";
+import { EmptyState, InlineAlert } from "@/components/ui/feedback";
+import { Modal } from "@/components/ui/modal";
+import { PageHeader } from "@/components/ui/page-header";
+import { Panel, PanelHeader } from "@/components/ui/panel";
+import { Stat } from "@/components/ui/stat";
 
 type Incident = {
   id: number;
@@ -12,13 +38,6 @@ type Incident = {
   resolved_at: string | null;
   summary: string | null;
 };
-
-type NotificationItem = {
-  id: number; monitor_id: number; incident_id: number | null;
-  type: "monitor_down" | "monitor_recovered"; title: string; message: string;
-  is_read: boolean; created_at: string;
-};
-type NotificationConfig = { configured: boolean; public_key: string | null };
 
 type Monitor = {
   id: number;
@@ -33,20 +52,50 @@ type Monitor = {
   created_at: string;
 };
 
-function formatDate(value: string | null) {
+type StatusKey = "up" | "down" | "pending" | "paused";
+
+function absoluteDate(value: string | null) {
   if (!value) return "Not checked yet";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Not checked yet" : date.toLocaleString();
 }
 
-function statusLabel(monitor: Monitor) {
-  if (!monitor.is_active) return "Paused";
-  if (monitor.current_status === "up") return "Operational";
-  if (monitor.current_status === "down") return "Down";
-  return "Pending";
+function relativeTime(value: string | null) {
+  if (!value) return "never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "never";
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.round(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
-export default function DashboardClient({ email }: { email: string }) {
+function statusOf(monitor: Monitor): StatusKey {
+  if (!monitor.is_active) return "paused";
+  if (monitor.current_status === "up") return "up";
+  if (monitor.current_status === "down") return "down";
+  return "pending";
+}
+
+const statusMeta: Record<StatusKey, { label: string; tone: Tone; pulse?: boolean }> = {
+  up: { label: "Operational", tone: "ok" },
+  down: { label: "Down", tone: "crit", pulse: true },
+  pending: { label: "Pending", tone: "warn" },
+  paused: { label: "Paused", tone: "neutral" },
+};
+
+const statusBar: Record<StatusKey, string> = {
+  up: "bg-ok",
+  down: "bg-crit",
+  pending: "bg-warn",
+  paused: "bg-line-strong",
+};
+
+export default function DashboardClient() {
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [incidentsLoading, setIncidentsLoading] = useState(true);
@@ -55,19 +104,13 @@ export default function DashboardClient({ email }: { email: string }) {
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [monitorQuery, setMonitorQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "up" | "down" | "paused" | "pending">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | StatusKey>("all");
   const [copiedMonitorId, setCopiedMonitorId] = useState<number | null>(null);
   const [copyError, setCopyError] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [urlError, setUrlError] = useState("");
   const [createdMonitorName, setCreatedMonitorName] = useState("");
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notificationError, setNotificationError] = useState("");
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-  const unreadCount = notifications.filter((item) => !item.is_read).length;
 
   const loadMonitors = useCallback(async () => {
     setLoading(true);
@@ -99,135 +142,43 @@ export default function DashboardClient({ email }: { email: string }) {
     }
   }, []);
 
-  const loadNotifications = useCallback(async () => {
-    try {
-      const response = await fetch("/api/notifications?limit=30", { cache: "no-store" });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.detail || "Could not load notifications.");
-      setNotifications(Array.isArray(body) ? body : []);
-      setNotificationError("");
-    } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Could not load notifications.");
-    }
-  }, []);
-
   useEffect(() => {
-    if (!showForm) return;
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !saving) setShowForm(false);
-    }
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [showForm, saving]);
+    void loadMonitors();
+    void loadIncidents();
+  }, [loadMonitors, loadIncidents]);
 
-  useEffect(() => {
-    void loadMonitors(); void loadIncidents(); void loadNotifications();
-    const timer = window.setInterval(() => {
-      void loadNotifications();
-    }, 30000);
-    return () => window.clearInterval(timer);
-  }, [loadMonitors, loadIncidents, loadNotifications]);
+  const stats = useMemo(() => {
+    const up = monitors.filter((m) => m.is_active && m.current_status === "up").length;
+    const down = monitors.filter((m) => m.is_active && m.current_status === "down").length;
+    const paused = monitors.filter((m) => !m.is_active).length;
+    const pending = monitors.length - up - down - paused;
+    return { total: monitors.length, up, down, paused, pending };
+  }, [monitors]);
 
-  async function markNotificationRead(id: number) {
-    const response = await fetch(`/api/notifications/${id}/read`, { method: "PATCH" });
-    if (!response.ok) { setNotificationError("Could not mark notification as read."); return; }
-    setNotifications((current) => current.map((item) => item.id === id ? { ...item, is_read: true } : item));
-  }
-
-  async function markAllNotificationsRead() {
-    const response = await fetch("/api/notifications/read-all", { method: "POST" });
-    if (!response.ok) { setNotificationError("Could not mark notifications as read."); return; }
-    setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
-  }
-
-  function decodeVapidKey(value: string) {
-    const padding = "=".repeat((4 - value.length % 4) % 4);
-    const raw = window.atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
-    return Uint8Array.from(raw, (character) => character.charCodeAt(0));
-  }
-
-  async function toggleWebPush() {
-    setPushBusy(true); setNotificationError("");
-    try {
-      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-        throw new Error("This browser does not support web push notifications.");
-      }
-      if (Notification.permission === "denied") {
-        throw new Error("Browser notifications are blocked. Allow them in your browser site settings.");
-      }
-      const configResponse = await fetch("/api/notifications/push-config", { cache: "no-store" });
-      const config = await configResponse.json() as NotificationConfig;
-      if (!configResponse.ok || !config.configured || !config.public_key) {
-        throw new Error("Web push is not configured on the TraceStack server yet.");
-      }
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-      if (permission !== "granted") throw new Error("Allow browser notifications to enable web push.");
-      let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true, applicationServerKey: decodeVapidKey(config.public_key),
-      });
-      const response = await fetch("/api/notifications/push-subscriptions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.detail || "Could not enable web push.");
-      setPushEnabled(true);
-    } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Could not enable web push.");
-    } finally { setPushBusy(false); }
-  }
-
-  async function disableWebPush() {
-    setPushBusy(true); setNotificationError("");
-    try {
-      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
-      const subscription = await registration?.pushManager.getSubscription();
-      if (subscription) {
-        await fetch("/api/notifications/push-subscriptions", {
-          method: "DELETE", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: subscription.endpoint }),
-        });
-        await subscription.unsubscribe();
-      }
-      setPushEnabled(false);
-    } catch {
-      setNotificationError("Could not disable web push. Please try again.");
-    } finally { setPushBusy(false); }
-  }
-
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.getRegistration("/sw.js").then(async (registration) => {
-      const subscription = await registration?.pushManager.getSubscription();
-      setPushEnabled(Boolean(subscription));
-    }).catch(() => setPushEnabled(false));
-  }, []);
-
-  const stats = useMemo(() => ({
-    total: monitors.length,
-    up: monitors.filter((m) => m.is_active && m.current_status === "up").length,
-    down: monitors.filter((m) => m.is_active && m.current_status === "down").length,
-    paused: monitors.filter((m) => !m.is_active).length,
-  }), [monitors]);
+  const openIncidents = incidents.filter((incident) => incident.status === "open").length;
 
   const filteredMonitors = useMemo(() => {
     const query = monitorQuery.trim().toLowerCase();
     return monitors.filter((monitor) => {
-      const status = !monitor.is_active ? "paused" : monitor.current_status === "up" ? "up" : monitor.current_status === "down" ? "down" : "pending";
+      const status = statusOf(monitor);
       const matchesStatus = statusFilter === "all" || status === statusFilter;
-      const matchesQuery = !query || monitor.name.toLowerCase().includes(query) || monitor.url.toLowerCase().includes(query);
+      const matchesQuery =
+        !query || monitor.name.toLowerCase().includes(query) || monitor.url.toLowerCase().includes(query);
       return matchesStatus && matchesQuery;
     });
   }, [monitors, monitorQuery, statusFilter]);
+
+  const busy = loading || incidentsLoading;
 
   async function copyMonitorUrl(monitor: Monitor) {
     setCopyError("");
     try {
       await navigator.clipboard.writeText(monitor.url);
       setCopiedMonitorId(monitor.id);
-      window.setTimeout(() => setCopiedMonitorId((current) => current === monitor.id ? null : current), 1800);
+      window.setTimeout(
+        () => setCopiedMonitorId((current) => (current === monitor.id ? null : current)),
+        1800,
+      );
     } catch {
       setCopyError("Could not copy the endpoint URL. Copy it directly from the monitor row.");
     }
@@ -242,9 +193,25 @@ export default function DashboardClient({ email }: { email: string }) {
     const name = String(form.get("name") || "").trim();
     const rawUrl = String(form.get("url") || "").trim();
     let parsedUrl: URL;
-    try { parsedUrl = new URL(rawUrl); } catch { setUrlError("Enter a complete URL, such as https://example.com/health."); setFormError("Please fix the highlighted field."); setSaving(false); return; }
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) { setUrlError("Use an HTTP or HTTPS URL."); setFormError("Please fix the highlighted field."); setSaving(false); return; }
-    if (!name) { setFormError("Enter a name for this monitor."); setSaving(false); return; }
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      setUrlError("Enter a complete URL, such as https://example.com/health.");
+      setFormError("Please fix the highlighted field.");
+      setSaving(false);
+      return;
+    }
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      setUrlError("Use an HTTP or HTTPS URL.");
+      setFormError("Please fix the highlighted field.");
+      setSaving(false);
+      return;
+    }
+    if (!name) {
+      setFormError("Enter a name for this monitor.");
+      setSaving(false);
+      return;
+    }
     setUrlError("");
     const payload = {
       name,
@@ -273,185 +240,557 @@ export default function DashboardClient({ email }: { email: string }) {
     }
   }
 
+  const fleet = ([
+    ["up", stats.up],
+    ["down", stats.down],
+    ["pending", stats.pending],
+    ["paused", stats.paused],
+  ] as Array<[StatusKey, number]>).filter(([, count]) => count > 0);
+
   return (
-    <div className="animate-fade-in min-h-screen bg-[#090b0d] text-zinc-100">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-white/[0.08] bg-[#0c0f12] px-5 py-6 lg:flex">
-        <a href="/dashboard" className="flex items-center gap-3 px-2 text-lg font-bold tracking-wide text-cyan-300">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300/10 text-sm">TS</span>
-          TRACESTACK
-        </a>
-        <p className="mb-3 mt-10 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">Workspace</p>
-        <a href="#overview" className="flex items-center gap-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.08] px-3 py-3 text-sm font-medium text-cyan-200"><span>▦</span> Overview</a>
-        <a href="#monitors" className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"><span>◉</span> Monitors</a>
-        <a href="#incidents" className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"><span>△</span> Incidents</a>
-        <a href="/dashboard/analytics" className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"><span>↗</span> Analytics</a>
-        <div className="mt-auto rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> API connection</div>
-          <p className="text-xs leading-5 text-zinc-500">Monitor data is loaded securely through your signed-in session.</p>
-        </div>
-      </aside>
+    <>
+      <PageHeader
+        eyebrow="Service health"
+        title="Your monitors, at a glance"
+        description="Availability and recent activity across every endpoint in this workspace."
+        actions={
+          <>
+            <Button
+              onClick={() => {
+                void loadMonitors();
+                void loadIncidents();
+              }}
+              disabled={busy}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin-slow")} />
+              {busy ? "Refreshing" : "Refresh"}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setFormError("");
+                setUrlError("");
+                setShowForm(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Add monitor
+            </Button>
+          </>
+        }
+      />
 
-      <div className="lg:pl-64">
-        <header className="flex min-h-[76px] items-center justify-between border-b border-white/[0.08] px-5 sm:px-8">
-          <div><p className="text-xs text-zinc-500">Workspace / Overview</p><p className="mt-1 text-sm font-medium text-zinc-200">Monitoring dashboard</p></div>
-          <div className="relative flex items-center gap-3">
-            <div className="relative">
-              <button type="button" aria-label={`Notifications, ${unreadCount} unread`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-lg text-zinc-200 transition hover:bg-white/[0.05]">🔔
-                {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-400 px-1 text-[10px] font-bold text-zinc-950">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+      {createdMonitorName && (
+        <div className="mb-5 flex items-center gap-2 rounded-md border border-ok/25 bg-ok/[0.07] px-3.5 py-2.5 text-[13px] text-ok">
+          <CircleCheck className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{createdMonitorName} was added successfully.</span>
+          <button
+            type="button"
+            onClick={() => setCreatedMonitorName("")}
+            aria-label="Dismiss success message"
+            className="rounded p-0.5 text-ok/70 transition-colors hover:text-ok"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      <section aria-label="Monitor statistics" className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+        <Stat label="Total" value={stats.total} icon={<Globe className="h-4 w-4" />} loading={loading} note="Monitored endpoints" />
+        <Stat label="Operational" value={stats.up} tone="ok" icon={<CircleCheck className="h-4 w-4" />} loading={loading} note="Reporting healthy" />
+        <Stat label="Down" value={stats.down} tone={stats.down ? "crit" : "neutral"} icon={<CircleAlert className="h-4 w-4" />} loading={loading} note={stats.down ? "Needs attention" : "All clear"} />
+        <Stat label="Paused" value={stats.paused} icon={<CirclePause className="h-4 w-4" />} loading={loading} note="Checks disabled" />
+        <Stat label="Open incidents" value={openIncidents} tone={openIncidents ? "warn" : "neutral"} icon={<TriangleAlert className="h-4 w-4" />} loading={incidentsLoading} note={openIncidents ? "Currently unresolved" : "No active outages"} />
+      </section>
+
+      <Panel className="mt-5" as="section">
+        <div id="monitors" className="scroll-mt-20" />
+        <PanelHeader
+          icon={<Activity className="h-4 w-4" />}
+          title="Monitors"
+          description="Latest known status for each endpoint."
+          actions={
+            <span className="tnum rounded-[6px] border border-line px-2.5 py-1 text-[11px] text-muted">
+              {filteredMonitors.length} / {stats.total}
+            </span>
+          }
+        />
+
+        {stats.total > 0 && (
+          <div className="border-b border-line px-5 py-3.5">
+            <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-canvas/70">
+              {fleet.map(([key, count]) => (
+                <span
+                  key={key}
+                  className={cn(statusBar[key], "h-full")}
+                  style={{ width: `${(count / stats.total) * 100}%` }}
+                  title={`${count} ${statusMeta[key].label.toLowerCase()}`}
+                />
+              ))}
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+              {fleet.map(([key, count]) => (
+                <span key={key} className="flex items-center gap-1.5 text-[11px] text-faint">
+                  <span className={cn("h-1.5 w-1.5 rounded-full", statusBar[key])} />
+                  <span className="text-muted">{statusMeta[key].label}</span>
+                  <span className="tnum">{count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 border-b border-line px-5 py-3.5 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+            <input
+              value={monitorQuery}
+              onChange={(event) => setMonitorQuery(event.target.value)}
+              placeholder="Search by name or URL"
+              aria-label="Search monitors"
+              className="h-[38px] w-full rounded-md border border-line-strong bg-canvas/60 pl-9 pr-9 text-sm text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/60"
+            />
+            {monitorQuery && (
+              <button
+                type="button"
+                onClick={() => setMonitorQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-faint transition-colors hover:text-ink"
+              >
+                <X className="h-3.5 w-3.5" />
               </button>
-              {notificationsOpen && <div className="absolute right-0 z-40 mt-3 w-[min(90vw,390px)] overflow-hidden rounded-2xl border border-white/10 bg-[#111518] shadow-2xl">
-                <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3"><div><p className="text-sm font-semibold">Notifications</p><p className="mt-0.5 text-xs text-zinc-500">{unreadCount} unread</p></div><button onClick={() => void markAllNotificationsRead()} className="text-xs text-cyan-200 hover:text-cyan-100">Mark all read</button></div>
-                <div className="max-h-80 overflow-y-auto">
-                  {notificationError && <p role="alert" className="px-4 py-3 text-xs text-rose-200">{notificationError}</p>}
-                  {notifications.length === 0 ? <p className="px-4 py-8 text-center text-sm text-zinc-500">You're all caught up.</p> : notifications.map((item) => <button key={item.id} onClick={() => { void markNotificationRead(item.id); setNotificationsOpen(false); document.getElementById("incidents")?.scrollIntoView({ behavior: "smooth" }); }} className={`block w-full border-b border-white/[0.06] px-4 py-3 text-left transition hover:bg-white/[0.04] ${item.is_read ? "opacity-65" : "bg-cyan-300/[0.035]"}`}>
-                    <span className="flex items-start gap-3"><span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${item.type === "monitor_down" ? "bg-rose-400/10 text-rose-300" : "bg-emerald-400/10 text-emerald-300"}`}>{item.type === "monitor_down" ? "!" : "✓"}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-zinc-200">{item.title}</span><span className="mt-1 block text-xs leading-5 text-zinc-500">{item.message}</span><span className="mt-1 block text-[11px] text-zinc-600">{formatDate(item.created_at)}</span></span>{!item.is_read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />}</span>
-                  </button>)}
-                </div>
-                <div className="border-t border-white/[0.08] p-3"><button disabled={pushBusy} onClick={() => void (pushEnabled ? disableWebPush() : toggleWebPush())} className="w-full rounded-xl border border-white/10 px-3 py-2.5 text-xs font-medium text-zinc-200 transition hover:bg-white/[0.05] disabled:opacity-50">{pushBusy ? "Updating…" : pushEnabled ? "Disable browser notifications" : "Enable browser notifications"}</button><p className="mt-2 text-center text-[11px] leading-4 text-zinc-600">In-app alerts are always on. Browser alerts require permission.</p></div>
-              </div>}
-            </div>
-            <span className="hidden max-w-56 truncate text-sm text-zinc-400 sm:block">{email}</span>
-            <SignOutButton />
+            )}
           </div>
-        </header>
-
-        <nav aria-label="Dashboard navigation" className="flex gap-2 overflow-x-auto border-b border-white/[0.08] px-5 py-3 lg:hidden">
-          <a href="#overview" className="interactive-control shrink-0 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-medium text-cyan-200">Overview</a>
-          <a href="#monitors" className="interactive-control shrink-0 rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100">Monitors</a>
-          <a href="#incidents" className="interactive-control shrink-0 rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100">Incidents</a>
-          <a href="/dashboard/analytics" className="interactive-control shrink-0 rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100">Analytics ↗</a>
-        </nav>
-
-        <main id="overview" className="mx-auto max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">System overview</p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Your monitors, at a glance.</h1>
-              <p className="mt-2 text-sm text-zinc-500">Keep an eye on availability and catch issues early.</p>{createdMonitorName && <p role="status" className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-300"><span aria-hidden="true">✓</span> {createdMonitorName} was added successfully.<button type="button" onClick={() => setCreatedMonitorName("")} aria-label="Dismiss success message" className="ml-1 text-emerald-200/70 hover:text-emerald-100">×</button></p>}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { void loadMonitors(); void loadIncidents(); }} disabled={loading || incidentsLoading} className="interactive-control rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-50">{loading || incidentsLoading ? "Refreshing…" : "↻ Refresh"}</button>
-              <button onClick={() => { setFormError(""); setUrlError(""); setShowForm(true); }} className="interactive-control rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200">＋ Add monitor</button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 shrink-0 text-faint" />
+            <Select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              aria-label="Filter by status"
+              className="w-full sm:w-44"
+            >
+              <option value="all">All statuses</option>
+              <option value="up">Operational</option>
+              <option value="down">Down</option>
+              <option value="pending">Pending</option>
+              <option value="paused">Paused</option>
+            </Select>
           </div>
-
-          <section aria-label="Monitor statistics" className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { label: "Total monitors", value: stats.total, note: "Across your workspace", icon: "◉" },
-              { label: "Operational", value: stats.up, note: "Currently reporting up", icon: "↗" },
-              { label: "Down", value: stats.down, note: "Needs your attention", icon: "!" },
-              { label: "Paused", value: stats.paused, note: "Checks temporarily disabled", icon: "Ⅱ" },
-            ].map((card, index) => (
-              <article key={card.label} className="interactive-card rounded-2xl border border-white/[0.08] bg-[#101316] p-5">
-                <div className="flex items-center justify-between"><span className="text-sm text-zinc-400">{card.label}</span><span className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm ${index === 2 ? "bg-rose-400/10 text-rose-300" : "bg-cyan-300/10 text-cyan-200"}`}>{card.icon}</span></div>
-                <p className="mt-5 text-3xl font-semibold tracking-tight">{loading ? "—" : card.value}</p>
-                <p className="mt-2 text-xs text-zinc-600">{card.note}</p>
-              </article>
-            ))}
-          </section>
-
-          <section id="monitors" className="mt-8 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101316]">
-            <div className="flex flex-col gap-3 border-b border-white/[0.07] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <div><h2 className="font-semibold">All monitors</h2><p className="mt-1 text-sm text-zinc-500">Your endpoints and their latest known status.</p></div>
-              <span className="w-fit rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-400">{filteredMonitors.length} of {stats.total} monitors</span>
-            </div>
-            <div className="grid gap-3 border-b border-white/[0.06] p-4 sm:grid-cols-[minmax(0,1fr)_190px] sm:px-5">
-              <label className="flex items-center gap-3 rounded-xl border border-white/[0.1] bg-black/20 px-3.5 focus-within:border-cyan-300/50">
-                <span aria-hidden="true" className="text-zinc-500">⌕</span>
-                <span className="sr-only">Search monitors</span>
-                <input value={monitorQuery} onChange={(event) => setMonitorQuery(event.target.value)} placeholder="Search by name or URL…" className="min-w-0 flex-1 bg-transparent py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600" />
-                {monitorQuery && <button type="button" onClick={() => setMonitorQuery("")} aria-label="Clear search" className="text-xs text-zinc-500 hover:text-white">Clear</button>}
-              </label>
-              <label className="flex items-center gap-3 rounded-xl border border-white/[0.1] bg-black/20 px-3.5">
-                <span className="text-xs text-zinc-500">Status</span>
-                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="min-w-0 flex-1 cursor-pointer appearance-none bg-[#111518] py-3 text-sm text-zinc-100 outline-none focus-visible:outline-cyan-300">
-                  <option className="bg-[#111518] text-zinc-100" value="all">All statuses</option><option className="bg-[#111518] text-zinc-100" value="up">Operational</option><option className="bg-[#111518] text-zinc-100" value="down">Down</option><option className="bg-[#111518] text-zinc-100" value="pending">Pending</option><option className="bg-[#111518] text-zinc-100" value="paused">Paused</option>
-                </select>
-              </label>
-            </div>
-            {error && <div role="alert" className="m-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.06] p-4 text-sm text-rose-200">{error}<button onClick={() => void loadMonitors()} className="ml-3 underline">Try again</button></div>}{copyError && <p role="alert" className="mx-5 mt-3 rounded-lg border border-rose-400/20 bg-rose-400/[0.04] px-3 py-2 text-xs text-rose-200">{copyError}</p>}
-            {loading ? <div className="p-12 text-center text-sm text-zinc-500">Loading your monitors…</div> :
-              monitors.length === 0 && !error ? (
-                <div className="px-5 py-12 sm:px-8 sm:py-16">
-                  <div className="mx-auto max-w-3xl text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] text-2xl text-cyan-200" aria-hidden="true">⌁</div>
-                    <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Your monitoring starts here</p>
-                    <h3 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">Keep your first endpoint in view.</h3>
-                    <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-400">Create a monitor for a public website or API. TraceStack will check it on your chosen schedule and surface failures here, alongside incident activity and response history.</p>
-                    <button onClick={() => { setFormError(""); setUrlError(""); setShowForm(true); }} className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">＋ Create your first monitor <span aria-hidden="true">→</span></button>
-                  </div>
-                  <div className="mx-auto mt-10 grid max-w-3xl gap-3 text-left sm:grid-cols-3">
-                    <article className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-sm font-semibold text-cyan-200">01</span>
-                      <h4 className="mt-4 text-sm font-semibold text-zinc-200">Add an endpoint</h4>
-                      <p className="mt-2 text-xs leading-5 text-zinc-500">Give it a recognizable name and a public HTTP or HTTPS URL. A health-check route is ideal.</p>
-                    </article>
-                    <article className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-sm font-semibold text-cyan-200">02</span>
-                      <h4 className="mt-4 text-sm font-semibold text-zinc-200">Choose a schedule</h4>
-                      <p className="mt-2 text-xs leading-5 text-zinc-500">Set how often TraceStack should request the endpoint and which HTTP status counts as healthy.</p>
-                    </article>
-                    <article className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-sm font-semibold text-cyan-200">03</span>
-                      <h4 className="mt-4 text-sm font-semibold text-zinc-200">Watch for changes</h4>
-                      <p className="mt-2 text-xs leading-5 text-zinc-500">Review the latest status, check history, and incidents from your dashboard.</p>
-                    </article>
-                  </div>
-                  <p className="mt-6 text-center text-xs text-zinc-600">Only endpoints reachable from the monitoring server can be checked.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left text-sm">
-                    <thead className="bg-white/[0.02] text-xs uppercase tracking-wider text-zinc-600"><tr><th className="px-6 py-4 font-medium">Monitor</th><th className="px-6 py-4 font-medium">Status</th><th className="px-6 py-4 font-medium">Interval</th><th className="px-6 py-4 font-medium">Last checked</th><th className="px-6 py-4 font-medium">Expected</th><th className="px-6 py-4 text-right font-medium">Actions</th></tr></thead>
-                    <tbody className="divide-y divide-white/[0.06]">
-                      {filteredMonitors.map((monitor) => {
-                        const status = statusLabel(monitor);
-                        const tone = status === "Operational" ? "bg-emerald-400/10 text-emerald-300" : status === "Down" ? "bg-rose-400/10 text-rose-300" : "bg-amber-300/10 text-amber-200";
-                        return <tr key={monitor.id} className="transition hover:bg-white/[0.02]">
-                          <td className="px-6 py-4"><a href={`/dashboard/monitors/${monitor.id}`} className="font-medium text-zinc-200 transition hover:text-cyan-200 hover:underline">{monitor.name} ↗</a><p className="mt-1 max-w-sm truncate text-xs text-zinc-500">{monitor.url}</p></td>
-                          <td className="px-6 py-4"><span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ${tone}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status}</span></td>
-                          <td className="px-6 py-4 text-zinc-400">{Math.round(monitor.check_interval_seconds / 60)} min</td>
-                          <td className="px-6 py-4 text-zinc-500">{formatDate(monitor.last_checked_at)}</td>
-                          <td className="px-6 py-4 text-zinc-400">{monitor.expected_status_code}</td><td className="px-6 py-4"><div className="flex items-center justify-end gap-2"><button type="button" onClick={() => void copyMonitorUrl(monitor)} className="interactive-control whitespace-nowrap rounded-lg border border-white/[0.09] px-2.5 py-1.5 text-xs text-zinc-400 hover:border-cyan-300/30 hover:text-cyan-200" aria-label={`Copy URL for ${monitor.name}`}>{copiedMonitorId === monitor.id ? "Copied ✓" : "Copy URL"}</button><a href={`/dashboard/monitors/${monitor.id}`} className="interactive-control whitespace-nowrap rounded-lg border border-cyan-300/20 bg-cyan-300/[0.06] px-2.5 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-300/[0.12]">Details ↗</a></div></td>
-                        </tr>;
-                      })}
-                    </tbody>
-                  </table>
-                  {filteredMonitors.length === 0 && <div className="px-6 py-12 text-center"><p className="text-sm font-medium text-zinc-300">No matching monitors</p><p className="mt-2 text-sm text-zinc-500">Try another search or status filter.</p><button type="button" onClick={() => { setMonitorQuery(""); setStatusFilter("all"); }} className="mt-4 text-sm font-medium text-cyan-300 hover:text-cyan-200">Clear filters</button></div>}
-                </div>
-              )}
-          </section>
-
-          <section id="incidents" className="mt-6 rounded-2xl border border-white/[0.08] bg-[#101316] p-5 sm:p-6">
-            <div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-300/10 text-amber-200">△</span><div><h2 className="font-semibold">Incident activity</h2><p className="mt-1 text-sm text-zinc-500">Recent outages detected by your monitors.</p></div></div>
-            {incidentsError ? <p role="alert" className="mt-5 rounded-xl border border-rose-400/20 bg-rose-400/5 px-4 py-3 text-sm text-rose-200">{incidentsError}</p> : incidentsLoading ? <p className="mt-5 text-sm text-zinc-500">Loading incidents…</p> : incidents.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-600">No incidents recorded yet. Incidents appear after consecutive failed checks.</div> : <div className="mt-5 space-y-3">
-              {incidents.map((incident) => {
-                const monitor = monitors.find((item) => item.id === incident.monitor_id);
-                return <article key={incident.id} className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-zinc-200">{incident.title}</h3><p className="mt-1 text-xs text-zinc-500">{monitor?.name ?? `Monitor #${incident.monitor_id}`} · Started {formatDate(incident.started_at)}</p></div><span className={`rounded-full px-2.5 py-1 text-xs ${incident.status === "open" ? "bg-rose-400/10 text-rose-300" : "bg-emerald-400/10 text-emerald-300"}`}>{incident.status === "open" ? "Open" : "Resolved"}</span></div>
-                  {incident.summary && <p className="mt-3 text-sm leading-5 text-zinc-400">{incident.summary}</p>}
-                  {incident.resolved_at && <p className="mt-2 text-xs text-zinc-500">Resolved {formatDate(incident.resolved_at)}</p>}
-                </article>;
-              })}
-            </div>}
-          </section>
-          <p className="mt-8 text-center text-xs text-zinc-700">TraceStack · Monitor with confidence</p>
-        </main>
-      </div>
-
-      {showForm && <div onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setShowForm(false); }} className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
-        <div role="dialog" aria-modal="true" aria-labelledby="add-monitor-title" className="my-8 w-full max-w-lg animate-fade-up rounded-2xl border border-white/10 bg-[#111518] p-6 shadow-2xl sm:p-7">
-          <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">New endpoint</p><h2 id="add-monitor-title" className="mt-2 text-xl font-semibold">Add a monitor</h2><p className="mt-1 text-sm text-zinc-500">Start tracking an endpoint in a few steps.</p><div className="mt-4 rounded-xl border border-cyan-300/10 bg-cyan-300/[0.035] px-3.5 py-3 text-xs leading-5 text-zinc-400"><span className="font-semibold text-cyan-200">Getting started</span><br />Use a publicly reachable HTTP or HTTPS endpoint. TraceStack checks it on your selected interval and records each result.</div></div><button type="button" onClick={() => setShowForm(false)} disabled={saving} aria-label="Close dialog" className="interactive-control rounded-lg px-2 py-1 text-xl text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50">×</button></div>
-          <form onSubmit={createMonitor} className="mt-6 space-y-4">
-            <label className="block text-sm text-zinc-300">Monitor name<input name="name" autoFocus required maxLength={100} placeholder="Production API" onChange={() => { if (formError) setFormError(""); }} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50" /><span className="mt-1.5 block text-xs text-zinc-600">A short name to recognize this service in your dashboard.</span></label>
-            <label className="block text-sm text-zinc-300">Endpoint URL<input name="url" required type="url" inputMode="url" autoComplete="url" aria-invalid={Boolean(urlError)} aria-describedby={urlError ? "monitor-url-error" : "monitor-url-help"} placeholder="https://api.example.com/health" onChange={() => { if (urlError) setUrlError(""); if (formError) setFormError(""); }} className={`mt-2 w-full rounded-xl border bg-black/20 px-3.5 py-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50 ${urlError ? "border-rose-400/60" : "border-white/10"}`} /><p id={urlError ? "monitor-url-error" : "monitor-url-help"} className={`mt-2 text-xs leading-5 ${urlError ? "text-rose-300" : "text-zinc-500"}`}>{urlError || "Use the full public URL, including https://. A health endpoint is ideal."}</p></label>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="block text-sm text-zinc-300">Check interval<select name="interval" defaultValue="300" className="mt-2 w-full cursor-pointer rounded-xl border border-white/10 bg-[#0c0f12] px-3 py-3 text-sm outline-none focus:border-cyan-300/50"><option value="300">Every 5 minutes</option><option value="600">Every 10 minutes</option><option value="900">Every 15 minutes</option><option value="1800">Every 30 minutes</option><option value="3600">Every hour</option></select></label><label className="block text-sm text-zinc-300">Expected status<select name="expectedStatus" defaultValue="200" className="mt-2 w-full cursor-pointer rounded-xl border border-white/10 bg-[#0c0f12] px-3 py-3 text-sm outline-none focus:border-cyan-300/50"><option value="200">200 OK</option><option value="201">201 Created</option><option value="204">204 No Content</option><option value="301">301 Redirect</option><option value="302">302 Redirect</option></select></label></div>
-            <label className="block text-sm text-zinc-300">Timeout<select name="timeout" defaultValue="10" className="mt-2 w-full cursor-pointer rounded-xl border border-white/10 bg-[#0c0f12] px-3 py-3 text-sm outline-none focus:border-cyan-300/50"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option></select></label>
-            {formError && <p role="alert" className="rounded-lg border border-rose-400/20 bg-rose-400/[0.06] p-3 text-sm text-rose-200">{formError}</p>}
-            <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="interactive-control rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">Cancel</button><button type="submit" disabled={saving} className="interactive-control rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-60">{saving ? "Creating…" : "Create monitor"}</button></div>
-          </form>
         </div>
-      </div>}
+
+        {error && (
+          <div className="p-5">
+            <InlineAlert
+              icon={<CircleAlert className="h-4 w-4" />}
+              action={
+                <Button size="sm" variant="danger" onClick={() => void loadMonitors()}>
+                  Try again
+                </Button>
+              }
+            >
+              {error}
+            </InlineAlert>
+          </div>
+        )}
+        {copyError && (
+          <p role="alert" className="border-b border-line px-5 py-2.5 text-[12px] text-crit">
+            {copyError}
+          </p>
+        )}
+
+        {loading ? (
+          <MonitorTableSkeleton />
+        ) : monitors.length === 0 && !error ? (
+          <div className="px-5 py-12 sm:px-8 sm:py-14">
+            <div className="mx-auto max-w-xl text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-accent">
+                <Activity className="h-5 w-5" />
+              </span>
+              <h3 className="mt-4 text-lg font-semibold tracking-[-0.01em] text-ink">
+                Keep your first endpoint in view
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-[13px] leading-6 text-muted">
+                Add a public website or API. TraceStack checks it on your schedule and surfaces
+                failures here alongside incident activity and response history.
+              </p>
+              <Button
+                variant="primary"
+                className="mt-5"
+                onClick={() => {
+                  setFormError("");
+                  setUrlError("");
+                  setShowForm(true);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                Create your first monitor
+              </Button>
+            </div>
+            <div className="mx-auto mt-10 grid max-w-3xl gap-3 text-left sm:grid-cols-3">
+              {[
+                { n: "01", title: "Add an endpoint", body: "Give it a recognizable name and a public HTTP or HTTPS URL." },
+                { n: "02", title: "Choose a schedule", body: "Set how often to check and which HTTP status counts as healthy." },
+                { n: "03", title: "Watch for changes", body: "Review status, check history, and incidents from the dashboard." },
+              ].map((step) => (
+                <article key={step.n} className="rounded-lg border border-line bg-canvas/40 p-4">
+                  <span className="tnum text-[11px] font-semibold text-accent">{step.n}</span>
+                  <h4 className="mt-2.5 text-[13px] font-semibold text-ink">{step.title}</h4>
+                  <p className="mt-1.5 text-[12px] leading-5 text-faint">{step.body}</p>
+                </article>
+              ))}
+            </div>
+            <p className="mt-6 text-center text-[11px] text-faint">
+              Only endpoints reachable from the monitoring server can be checked.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-line text-[11px] uppercase tracking-[0.1em] text-faint">
+                    <th scope="col" className="px-5 py-2.5 font-medium">Monitor</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Status</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Interval</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Last checked</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Expected</th>
+                    <th scope="col" className="px-5 py-2.5 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/70">
+                  {filteredMonitors.map((monitor) => {
+                    const meta = statusMeta[statusOf(monitor)];
+                    return (
+                      <tr key={monitor.id} className="group transition-colors hover:bg-ink/[0.02]">
+                        <td className="max-w-md px-5 py-3.5">
+                          <Link
+                            href={`/dashboard/monitors/${monitor.id}`}
+                            className="inline-flex items-center gap-1.5 font-medium text-ink transition-colors hover:text-accent"
+                          >
+                            {monitor.name}
+                            <ArrowUpRight className="h-3.5 w-3.5 text-faint opacity-0 transition-opacity group-hover:opacity-100" />
+                          </Link>
+                          <p className="mt-0.5 truncate font-mono text-[11.5px] text-faint">{monitor.url}</p>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge tone={meta.tone} dot pulse={meta.pulse}>{meta.label}</Badge>
+                        </td>
+                        <td className="tnum px-5 py-3.5 text-muted">
+                          {Math.round(monitor.check_interval_seconds / 60)} min
+                        </td>
+                        <td className="tnum px-5 py-3.5 text-muted" title={absoluteDate(monitor.last_checked_at)}>
+                          {relativeTime(monitor.last_checked_at)}
+                        </td>
+                        <td className="tnum px-5 py-3.5 font-mono text-[12px] text-muted">
+                          {monitor.expected_status_code}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void copyMonitorUrl(monitor)}
+                              aria-label={`Copy URL for ${monitor.name}`}
+                              className="flex h-7 items-center gap-1.5 rounded-[7px] border border-line px-2 text-[11px] text-muted transition-colors hover:border-line-strong hover:text-ink"
+                            >
+                              {copiedMonitorId === monitor.id ? (
+                                <>
+                                  <Check className="h-3 w-3 text-ok" />
+                                  Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3 w-3" />
+                                  Copy
+                                </>
+                              )}
+                            </button>
+                            <Link
+                              href={`/dashboard/monitors/${monitor.id}`}
+                              className="flex h-7 items-center rounded-[7px] border border-accent/25 bg-accent/[0.07] px-2 text-[11px] font-medium text-accent transition-colors hover:bg-accent/[0.13]"
+                            >
+                              Details
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <ul className="divide-y divide-line/70 md:hidden">
+              {filteredMonitors.map((monitor) => {
+                const meta = statusMeta[statusOf(monitor)];
+                return (
+                  <li key={monitor.id} className="px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <Link
+                        href={`/dashboard/monitors/${monitor.id}`}
+                        className="min-w-0 font-medium text-ink"
+                      >
+                        <span className="block truncate">{monitor.name}</span>
+                        <span className="mt-0.5 block truncate font-mono text-[11.5px] font-normal text-faint">
+                          {monitor.url}
+                        </span>
+                      </Link>
+                      <Badge tone={meta.tone} dot pulse={meta.pulse}>{meta.label}</Badge>
+                    </div>
+                    <dl className="tnum mt-3 grid grid-cols-3 gap-3 text-[12px]">
+                      <div>
+                        <dt className="text-faint">Interval</dt>
+                        <dd className="mt-0.5 text-muted">{Math.round(monitor.check_interval_seconds / 60)} min</dd>
+                      </div>
+                      <div>
+                        <dt className="text-faint">Checked</dt>
+                        <dd className="mt-0.5 text-muted">{relativeTime(monitor.last_checked_at)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-faint">Expected</dt>
+                        <dd className="mt-0.5 font-mono text-muted">{monitor.expected_status_code}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 flex gap-2">
+                      <Link
+                        href={`/dashboard/monitors/${monitor.id}`}
+                        className="flex h-8 flex-1 items-center justify-center rounded-md border border-accent/25 bg-accent/[0.07] text-[12px] font-medium text-accent"
+                      >
+                        Details
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => void copyMonitorUrl(monitor)}
+                        aria-label={`Copy URL for ${monitor.name}`}
+                        className="flex h-8 items-center justify-center gap-1.5 rounded-md border border-line px-3 text-[12px] text-muted"
+                      >
+                        {copiedMonitorId === monitor.id ? <Check className="h-3.5 w-3.5 text-ok" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedMonitorId === monitor.id ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {filteredMonitors.length === 0 && (
+              <EmptyState
+                icon={<Search className="h-4 w-4" />}
+                title="No matching monitors"
+                description="Try a different search term or status filter."
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setMonitorQuery("");
+                      setStatusFilter("all");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                }
+              />
+            )}
+          </>
+        )}
+      </Panel>
+
+      <Panel className="mt-5" as="section">
+        <div id="incidents" className="scroll-mt-20" />
+        <PanelHeader
+          icon={<TriangleAlert className="h-4 w-4" />}
+          title="Incident activity"
+          description="Outages detected after consecutive failed checks."
+          actions={
+            <Badge tone={openIncidents ? "crit" : "neutral"} dot={openIncidents > 0}>
+              {openIncidents ? `${openIncidents} open` : "None open"}
+            </Badge>
+          }
+        />
+
+        {incidentsError ? (
+          <div className="p-5">
+            <InlineAlert
+              icon={<CircleAlert className="h-4 w-4" />}
+              action={
+                <Button size="sm" variant="danger" onClick={() => void loadIncidents()}>
+                  Try again
+                </Button>
+              }
+            >
+              {incidentsError}
+            </InlineAlert>
+          </div>
+        ) : incidentsLoading ? (
+          <div className="divide-y divide-line/70">
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="flex items-center gap-4 px-5 py-4">
+                <div className="skeleton h-8 w-8 rounded-md" />
+                <div className="flex-1 space-y-2">
+                  <div className="skeleton h-3.5 w-56 max-w-full rounded" />
+                  <div className="skeleton h-3 w-40 max-w-full rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : incidents.length === 0 ? (
+          <EmptyState
+            icon={<CircleCheck className="h-4 w-4" />}
+            title="No incidents recorded"
+            description="Incidents appear here after two consecutive failed checks."
+            className="py-10"
+          />
+        ) : (
+          <ul className="divide-y divide-line/70">
+            {incidents.map((incident) => {
+              const monitor = monitors.find((item) => item.id === incident.monitor_id);
+              const open = incident.status === "open";
+              return (
+                <li key={incident.id} className="flex items-start gap-3.5 px-5 py-4">
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border",
+                      open ? "border-crit/25 bg-crit/10 text-crit" : "border-ok/25 bg-ok/10 text-ok",
+                    )}
+                  >
+                    {open ? <CircleAlert className="h-4 w-4" /> : <CircleCheck className="h-4 w-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                      <h3 className="text-[13px] font-medium text-ink">{incident.title}</h3>
+                      <Badge tone={open ? "crit" : "ok"} dot pulse={open}>
+                        {open ? "Open" : "Resolved"}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[12px] text-faint">
+                      <span className="text-muted">{monitor?.name ?? `Monitor #${incident.monitor_id}`}</span>
+                      <span className="px-1.5 text-line-strong">·</span>
+                      <span className="tnum">Started {absoluteDate(incident.started_at)}</span>
+                      {incident.resolved_at && (
+                        <>
+                          <span className="px-1.5 text-line-strong">·</span>
+                          <span className="tnum">Resolved {absoluteDate(incident.resolved_at)}</span>
+                        </>
+                      )}
+                    </p>
+                    {incident.summary && (
+                      <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-muted">{incident.summary}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      <Modal
+        open={showForm}
+        onClose={() => {
+          if (!saving) setShowForm(false);
+        }}
+        eyebrow="New endpoint"
+        title="Add a monitor"
+        description="TraceStack checks this endpoint on your selected interval and records each result."
+        footer={
+          <>
+            <Button type="button" onClick={() => setShowForm(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" form="create-monitor-form" variant="primary" loading={saving}>
+              {saving ? "Creating" : "Create monitor"}
+            </Button>
+          </>
+        }
+      >
+        <form id="create-monitor-form" onSubmit={createMonitor} className="space-y-4">
+          <Field label="Monitor name" hint="A short name to recognize this service in your dashboard.">
+            <Input
+              name="name"
+              autoFocus
+              required
+              maxLength={100}
+              placeholder="Production API"
+              onChange={() => {
+                if (formError) setFormError("");
+              }}
+            />
+          </Field>
+
+          <Field
+            label="Endpoint URL"
+            error={urlError || undefined}
+            hint="Use the full public URL, including https://. A health endpoint is ideal."
+          >
+            <Input
+              name="url"
+              required
+              type="url"
+              inputMode="url"
+              autoComplete="url"
+              invalid={Boolean(urlError)}
+              placeholder="https://api.example.com/health"
+              onChange={() => {
+                if (urlError) setUrlError("");
+                if (formError) setFormError("");
+              }}
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Check interval">
+              <Select name="interval" defaultValue="300">
+                <option value="300">Every 5 minutes</option>
+                <option value="600">Every 10 minutes</option>
+                <option value="900">Every 15 minutes</option>
+                <option value="1800">Every 30 minutes</option>
+                <option value="3600">Every hour</option>
+              </Select>
+            </Field>
+            <Field label="Expected status">
+              <Select name="expectedStatus" defaultValue="200">
+                <option value="200">200 OK</option>
+                <option value="201">201 Created</option>
+                <option value="204">204 No Content</option>
+                <option value="301">301 Redirect</option>
+                <option value="302">302 Redirect</option>
+              </Select>
+            </Field>
+          </div>
+
+          <Field label="Timeout" hint="How long to wait before a check is marked as failed.">
+            <Select name="timeout" defaultValue="10">
+              <option value="5">5 seconds</option>
+              <option value="10">10 seconds</option>
+              <option value="15">15 seconds</option>
+              <option value="30">30 seconds</option>
+            </Select>
+          </Field>
+
+          {formError && (
+            <InlineAlert icon={<CircleAlert className="h-4 w-4" />}>{formError}</InlineAlert>
+          )}
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function MonitorTableSkeleton() {
+  return (
+    <div className="divide-y divide-line/70">
+      {[0, 1, 2, 3, 4].map((row) => (
+        <div key={row} className="flex items-center gap-4 px-5 py-4">
+          <div className="flex-1 space-y-2">
+            <div className="skeleton h-3.5 w-44 max-w-full rounded" />
+            <div className="skeleton h-3 w-64 max-w-full rounded" />
+          </div>
+          <div className="skeleton hidden h-6 w-24 rounded-[6px] sm:block" />
+          <div className="skeleton hidden h-3.5 w-16 rounded md:block" />
+          <div className="skeleton h-7 w-20 rounded-[7px]" />
+        </div>
+      ))}
     </div>
   );
 }
