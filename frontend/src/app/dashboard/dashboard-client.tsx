@@ -372,11 +372,32 @@ export default function DashboardClient({ email }: { email: string }) {
             {error && <div role="alert" className="m-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.06] p-4 text-sm text-rose-200">{error}<button onClick={() => void loadMonitors()} className="ml-3 underline">Try again</button></div>}{copyError && <p role="alert" className="mx-5 mt-3 rounded-lg border border-rose-400/20 bg-rose-400/[0.04] px-3 py-2 text-xs text-rose-200">{copyError}</p>}
             {loading ? <div className="p-12 text-center text-sm text-zinc-500">Loading your monitors…</div> :
               monitors.length === 0 && !error ? (
-                <div className="px-6 py-16 text-center sm:py-20">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.07] text-2xl text-cyan-200">⌁</div>
-                  <h3 className="mt-5 text-lg font-semibold">Nothing to monitor yet</h3>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-zinc-500">Add a public website or API endpoint. TraceStack will check it on a schedule and show its latest status here.</p>
-                  <button onClick={() => { setFormError(""); setShowForm(true); }} className="mt-6 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-cyan-200">＋ Create your first monitor</button>
+                <div className="px-5 py-12 sm:px-8 sm:py-16">
+                  <div className="mx-auto max-w-3xl text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] text-2xl text-cyan-200" aria-hidden="true">⌁</div>
+                    <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Your monitoring starts here</p>
+                    <h3 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">Keep your first endpoint in view.</h3>
+                    <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-400">Create a monitor for a public website or API. TraceStack will check it on your chosen schedule and surface failures here, alongside incident activity and response history.</p>
+                    <button onClick={() => { setFormError(""); setUrlError(""); setShowForm(true); }} className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">＋ Create your first monitor <span aria-hidden="true">→</span></button>
+                  </div>
+                  <div className="mx-auto mt-10 grid max-w-3xl gap-3 text-left sm:grid-cols-3">
+                    <article className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-sm font-semibold text-cyan-200">01</span>
+                      <h4 className="mt-4 text-sm font-semibold text-zinc-200">Add an endpoint</h4>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">Give it a recognizable name and a public HTTP or HTTPS URL. A health-check route is ideal.</p>
+                    </article>
+                    <article className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-sm font-semibold text-cyan-200">02</span>
+                      <h4 className="mt-4 text-sm font-semibold text-zinc-200">Choose a schedule</h4>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">Set how often TraceStack should request the endpoint and which HTTP status counts as healthy.</p>
+                    </article>
+                    <article className="rounded-xl border border-white/[0.08] bg-black/10 p-4">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-sm font-semibold text-cyan-200">03</span>
+                      <h4 className="mt-4 text-sm font-semibold text-zinc-200">Watch for changes</h4>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">Review the latest status, check history, and incidents from your dashboard.</p>
+                    </article>
+                  </div>
+                  <p className="mt-6 text-center text-xs text-zinc-600">Only endpoints reachable from the monitoring server can be checked.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
