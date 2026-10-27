@@ -119,3 +119,110 @@ def test_stop_keeps_reference_when_worker_thread_is_still_running(monkeypatch):
     assert running_thread.join_timeout == 35
     assert instance._thread is running_thread
 
+
+
+def test_worker_claims_monitor_before_check_and_skips_it_until_next_schedule(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    try:
+        with TestingSessionLocal() as db:
+            monitor = Monitor(
+                owner_id="owner",
+                name="Claim test",
+                url="https://example.com",
+                is_active=True,
+                check_interval_seconds=300,
+                expected_status_code=200,
+                timeout_seconds=5,
+                current_status="unknown",
+                consecutive_failures=0,
+                consecutive_successes=0,
+                next_check_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+            )
+            db.add(monitor)
+            db.commit()
+            monitor_id = monitor.id
+
+        monkeypatch.setattr(worker, "SessionLocal", TestingSessionLocal)
+        observed_claims = []
+
+        def fake_perform_check(db, monitor):
+            claimed_time = monitor.next_check_at
+            if claimed_time.tzinfo is None:
+                claimed_time = claimed_time.replace(tzinfo=timezone.utc)
+            observed_claims.append(claimed_time > datetime.now(timezone.utc))
+            monitor.next_check_at = datetime.now(timezone.utc) + timedelta(seconds=300)
+            db.commit()
+            return SimpleNamespace(success=True, status_code=200, response_time_ms=8.0)
+
+        monkeypatch.setattr(worker, "perform_check", fake_perform_check)
+
+        assert worker.run_due_checks() == 1
+        assert observed_claims == [True]
+        # The committed claim/schedule means a second worker pass won't select it.
+        assert worker.run_due_checks() == 0
+        assert observed_claims == [True]
+
+        with TestingSessionLocal() as db:
+            persisted = db.scalar(select(Monitor).where(Monitor.id == monitor_id))
+            persisted_time = persisted.next_check_at
+            if persisted_time.tzinfo is None:
+                persisted_time = persisted_time.replace(tzinfo=timezone.utc)
+            assert persisted_time > datetime.now(timezone.utc)
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_worker_claims_are_conditional_on_monitor_still_being_due(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    try:
+        with TestingSessionLocal() as db:
+            monitor = Monitor(
+                owner_id="owner",
+                name="No longer due",
+                url="https://example.com",
+                is_active=True,
+                check_interval_seconds=300,
+                expected_status_code=200,
+                timeout_seconds=5,
+                current_status="unknown",
+                consecutive_failures=0,
+                consecutive_successes=0,
+                next_check_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+            )
+            db.add(monitor)
+            db.commit()
+            monitor_id = monitor.id
+
+        monkeypatch.setattr(worker, "SessionLocal", TestingSessionLocal)
+        # Simulate another scheduler having advanced this monitor after the initial
+        # candidate list was read but before this worker tries to claim it.
+        with TestingSessionLocal() as db:
+            db.execute(
+                worker.update(Monitor)
+                .where(Monitor.id == monitor_id)
+                .values(next_check_at=datetime.now(timezone.utc) + timedelta(minutes=5))
+            )
+            db.commit()
+
+        called = []
+        monkeypatch.setattr(worker, "perform_check", lambda db, monitor: called.append(monitor.id))
+        assert worker.run_due_checks() == 0
+        assert called == []
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
