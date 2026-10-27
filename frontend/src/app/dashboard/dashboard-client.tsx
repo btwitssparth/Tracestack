@@ -108,6 +108,15 @@ export default function DashboardClient({ email }: { email: string }) {
   }, []);
 
   useEffect(() => {
+    if (!showForm) return;
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape" && !saving) setShowForm(false);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showForm, saving]);
+
+  useEffect(() => {
     void loadMonitors(); void loadIncidents(); void loadNotifications();
     const timer = window.setInterval(() => {
       void loadNotifications();
@@ -213,7 +222,8 @@ export default function DashboardClient({ email }: { email: string }) {
     event.preventDefault();
     setSaving(true);
     setFormError("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payload = {
       name: String(form.get("name") || "").trim(),
       url: String(form.get("url") || "").trim(),
@@ -230,7 +240,7 @@ export default function DashboardClient({ email }: { email: string }) {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail || "Could not create monitor.");
       setShowForm(false);
-      event.currentTarget.reset();
+      formElement.reset();
       await loadMonitors();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Could not create monitor.");
@@ -384,16 +394,16 @@ export default function DashboardClient({ email }: { email: string }) {
         </main>
       </div>
 
-      {showForm && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
-        <div role="dialog" aria-modal="true" aria-labelledby="add-monitor-title" className="my-8 w-full max-w-lg rounded-2xl border border-white/10 bg-[#111518] p-6 shadow-2xl sm:p-7">
-          <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">New endpoint</p><h2 id="add-monitor-title" className="mt-2 text-xl font-semibold">Add a monitor</h2><p className="mt-1 text-sm text-zinc-500">Configure the endpoint you want to keep an eye on.</p></div><button onClick={() => setShowForm(false)} aria-label="Close" className="rounded-lg px-2 py-1 text-xl text-zinc-500 hover:bg-white/5 hover:text-white">×</button></div>
+      {showForm && <div onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setShowForm(false); }} className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-labelledby="add-monitor-title" className="my-8 w-full max-w-lg animate-fade-up rounded-2xl border border-white/10 bg-[#111518] p-6 shadow-2xl sm:p-7">
+          <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">New endpoint</p><h2 id="add-monitor-title" className="mt-2 text-xl font-semibold">Add a monitor</h2><p className="mt-1 text-sm text-zinc-500">Configure the endpoint you want to keep an eye on.</p></div><button type="button" onClick={() => setShowForm(false)} disabled={saving} aria-label="Close dialog" className="interactive-control rounded-lg px-2 py-1 text-xl text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50">×</button></div>
           <form onSubmit={createMonitor} className="mt-6 space-y-4">
-            <label className="block text-sm text-zinc-300">Monitor name<input name="name" required maxLength={100} placeholder="Production API" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50" /></label>
+            <label className="block text-sm text-zinc-300">Monitor name<input name="name" autoFocus required maxLength={100} placeholder="Production API" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50" /></label>
             <label className="block text-sm text-zinc-300">Endpoint URL<input name="url" required type="url" placeholder="https://api.example.com/health" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50" /></label>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="block text-sm text-zinc-300">Check interval<select name="interval" defaultValue="300" className="mt-2 w-full rounded-xl border border-white/10 bg-[#0c0f12] px-3 py-3 text-sm outline-none focus:border-cyan-300/50"><option value="300">Every 5 minutes</option><option value="600">Every 10 minutes</option><option value="900">Every 15 minutes</option><option value="1800">Every 30 minutes</option><option value="3600">Every hour</option></select></label><label className="block text-sm text-zinc-300">Expected status<select name="expectedStatus" defaultValue="200" className="mt-2 w-full rounded-xl border border-white/10 bg-[#0c0f12] px-3 py-3 text-sm outline-none focus:border-cyan-300/50"><option value="200">200 OK</option><option value="201">201 Created</option><option value="204">204 No Content</option><option value="301">301 Redirect</option><option value="302">302 Redirect</option></select></label></div>
             <label className="block text-sm text-zinc-300">Timeout<select name="timeout" defaultValue="10" className="mt-2 w-full rounded-xl border border-white/10 bg-[#0c0f12] px-3 py-3 text-sm outline-none focus:border-cyan-300/50"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option></select></label>
             {formError && <p role="alert" className="rounded-lg border border-rose-400/20 bg-rose-400/[0.06] p-3 text-sm text-rose-200">{formError}</p>}
-            <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">Cancel</button><button type="submit" disabled={saving} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-60">{saving ? "Creating…" : "Create monitor"}</button></div>
+            <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="interactive-control rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">Cancel</button><button type="submit" disabled={saving} className="interactive-control rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-60">{saving ? "Creating…" : "Create monitor"}</button></div>
           </form>
         </div>
       </div>}
