@@ -88,18 +88,18 @@ export default function AnalyticsClient() {
           <label className="flex flex-col gap-2 text-xs text-zinc-400">
             Select monitor
             <select value={monitorId} onChange={(event) => setMonitorId(event.target.value)} disabled={loadingMonitors || !monitors.length}
-              className="min-w-64 rounded-xl border border-white/10 bg-[#111518] px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-cyan-300/50">
-              {monitors.map((monitor) => <option key={monitor.id} value={monitor.id}>{monitor.name}</option>)}
+              className="min-w-64 cursor-pointer rounded-xl border border-white/10 bg-[#111518] px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-cyan-300/50">
+              {monitors.map((monitor) => <option className="bg-[#111518] text-zinc-100" key={monitor.id} value={monitor.id}>{monitor.name}</option>)}
             </select>
           </label>
         </div>
 
         {error && <p role="alert" className="mb-5 rounded-xl border border-rose-400/20 bg-rose-400/5 p-4 text-sm text-rose-200">{error}</p>}
-        {!loadingMonitors && !monitors.length && <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-8 text-center"><p className="font-medium">No monitors yet</p><p className="mt-2 text-sm text-zinc-500">Add a monitor first to start collecting analytics.</p><a href="/dashboard" className="mt-4 inline-block text-sm text-cyan-300">Go to dashboard</a></div>}
+        {!loadingMonitors && !monitors.length && <div className="interactive-card rounded-2xl border border-white/10 bg-white/[0.025] p-8 text-center"><p className="font-medium">No monitors yet</p><p className="mt-2 text-sm text-zinc-500">Add a monitor first to start collecting analytics.</p><a href="/dashboard" className="mt-4 inline-block text-sm text-cyan-300">Go to dashboard</a></div>}
 
         {monitors.length > 0 && <>
           <div className="mb-5 flex flex-wrap gap-2">
-            {ranges.map((range) => <button key={range.hours} onClick={() => setRangeHours(range.hours)} className={`rounded-xl border px-3 py-2 text-sm transition ${rangeHours === range.hours ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-200" : "border-white/10 text-zinc-400 hover:bg-white/[0.04]"}`}>{range.label}</button>)}
+            {ranges.map((range) => <button key={range.hours} onClick={() => setRangeHours(range.hours)} className={`interactive-control rounded-xl border px-3 py-2 text-sm transition ${rangeHours === range.hours ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-200" : "border-white/10 text-zinc-400 hover:bg-white/[0.04]"}`}>{range.label}</button>)}
           </div>
           <p className="mb-4 text-xs text-zinc-500">{selectedMonitor?.url} · {selectedMonitor?.current_status === "up" ? "Currently operational" : selectedMonitor?.current_status === "down" ? "Currently down" : "Status pending"} · Based on up to 100 most recent checks</p>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
