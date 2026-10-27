@@ -380,7 +380,7 @@ export default function DashboardClient({ email }: { email: string }) {
                           <td className="px-6 py-4"><span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ${tone}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status}</span></td>
                           <td className="px-6 py-4 text-zinc-400">{Math.round(monitor.check_interval_seconds / 60)} min</td>
                           <td className="px-6 py-4 text-zinc-500">{formatDate(monitor.last_checked_at)}</td>
-                          <td className="px-6 py-4 text-zinc-400">{monitor.expected_status_code}</td>
+                          <td className="px-6 py-4 text-zinc-400">{monitor.expected_status_code}</td><td className="px-6 py-4"><div className="flex items-center justify-end gap-2"><button type="button" onClick={() => void copyMonitorUrl(monitor)} className="interactive-control whitespace-nowrap rounded-lg border border-white/[0.09] px-2.5 py-1.5 text-xs text-zinc-400 hover:border-cyan-300/30 hover:text-cyan-200" aria-label={`Copy URL for ${monitor.name}`}>{copiedMonitorId === monitor.id ? "Copied ✓" : "Copy URL"}</button><a href={`/dashboard/monitors/${monitor.id}`} className="interactive-control whitespace-nowrap rounded-lg border border-cyan-300/20 bg-cyan-300/[0.06] px-2.5 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-300/[0.12]">Details ↗</a></div></td>
                         </tr>;
                       })}
                     </tbody>
