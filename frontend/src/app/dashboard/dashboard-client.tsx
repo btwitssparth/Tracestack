@@ -281,6 +281,13 @@ export default function DashboardClient({ email }: { email: string }) {
           </div>
         </header>
 
+        <nav aria-label="Dashboard navigation" className="flex gap-2 overflow-x-auto border-b border-white/[0.08] px-5 py-3 lg:hidden">
+          <a href="#overview" className="interactive-control shrink-0 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-medium text-cyan-200">Overview</a>
+          <a href="#monitors" className="interactive-control shrink-0 rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100">Monitors</a>
+          <a href="#incidents" className="interactive-control shrink-0 rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100">Incidents</a>
+          <a href="/dashboard/analytics" className="interactive-control shrink-0 rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100">Analytics ↗</a>
+        </nav>
+
         <main id="overview" className="mx-auto max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10">
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
             <div>
