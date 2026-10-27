@@ -56,6 +56,8 @@ export default function DashboardClient({ email }: { email: string }) {
   const [showForm, setShowForm] = useState(false);
   const [monitorQuery, setMonitorQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "up" | "down" | "paused" | "pending">("all");
+  const [copiedMonitorId, setCopiedMonitorId] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -218,6 +220,17 @@ export default function DashboardClient({ email }: { email: string }) {
     });
   }, [monitors, monitorQuery, statusFilter]);
 
+  async function copyMonitorUrl(monitor: Monitor) {
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(monitor.url);
+      setCopiedMonitorId(monitor.id);
+      window.setTimeout(() => setCopiedMonitorId((current) => current === monitor.id ? null : current), 1800);
+    } catch {
+      setCopyError("Could not copy the endpoint URL. Copy it directly from the monitor row.");
+    }
+  }
+
   async function createMonitor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -345,7 +358,7 @@ export default function DashboardClient({ email }: { email: string }) {
                 </select>
               </label>
             </div>
-            {error && <div role="alert" className="m-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.06] p-4 text-sm text-rose-200">{error}<button onClick={() => void loadMonitors()} className="ml-3 underline">Try again</button></div>}
+            {error && <div role="alert" className="m-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.06] p-4 text-sm text-rose-200">{error}<button onClick={() => void loadMonitors()} className="ml-3 underline">Try again</button></div>}{copyError && <p role="alert" className="mx-5 mt-3 rounded-lg border border-rose-400/20 bg-rose-400/[0.04] px-3 py-2 text-xs text-rose-200">{copyError}</p>}
             {loading ? <div className="p-12 text-center text-sm text-zinc-500">Loading your monitors…</div> :
               monitors.length === 0 && !error ? (
                 <div className="px-6 py-16 text-center sm:py-20">
@@ -356,8 +369,8 @@ export default function DashboardClient({ email }: { email: string }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-left text-sm">
-                    <thead className="bg-white/[0.02] text-xs uppercase tracking-wider text-zinc-600"><tr><th className="px-6 py-4 font-medium">Monitor</th><th className="px-6 py-4 font-medium">Status</th><th className="px-6 py-4 font-medium">Interval</th><th className="px-6 py-4 font-medium">Last checked</th><th className="px-6 py-4 font-medium">Expected</th></tr></thead>
+                  <table className="w-full min-w-[900px] text-left text-sm">
+                    <thead className="bg-white/[0.02] text-xs uppercase tracking-wider text-zinc-600"><tr><th className="px-6 py-4 font-medium">Monitor</th><th className="px-6 py-4 font-medium">Status</th><th className="px-6 py-4 font-medium">Interval</th><th className="px-6 py-4 font-medium">Last checked</th><th className="px-6 py-4 font-medium">Expected</th><th className="px-6 py-4 text-right font-medium">Actions</th></tr></thead>
                     <tbody className="divide-y divide-white/[0.06]">
                       {filteredMonitors.map((monitor) => {
                         const status = statusLabel(monitor);
