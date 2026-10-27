@@ -96,3 +96,26 @@ def test_worker_checks_only_active_due_monitors(monkeypatch):
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+def test_stop_keeps_reference_when_worker_thread_is_still_running(monkeypatch):
+    class StillRunningThread:
+        def __init__(self):
+            self.join_timeout = None
+
+        def join(self, timeout=None):
+            self.join_timeout = timeout
+
+        def is_alive(self):
+            return True
+
+    instance = worker.MonitoringWorker()
+    running_thread = StillRunningThread()
+    instance._thread = running_thread
+    monkeypatch.setattr(worker, "SHUTDOWN_TIMEOUT_SECONDS", 35)
+
+    instance.stop()
+
+    assert instance._stop_event.is_set()
+    assert running_thread.join_timeout == 35
+    assert instance._thread is running_thread
+
