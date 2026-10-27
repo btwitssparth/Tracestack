@@ -320,7 +320,7 @@ export default function DashboardClient({ email }: { email: string }) {
                         const status = statusLabel(monitor);
                         const tone = status === "Operational" ? "bg-emerald-400/10 text-emerald-300" : status === "Down" ? "bg-rose-400/10 text-rose-300" : "bg-amber-300/10 text-amber-200";
                         return <tr key={monitor.id} className="transition hover:bg-white/[0.02]">
-                          <td className="px-6 py-4"><p className="font-medium text-zinc-200">{monitor.name}</p><p className="mt-1 max-w-sm truncate text-xs text-zinc-500">{monitor.url}</p></td>
+                          <td className="px-6 py-4"><a href={`/dashboard/monitors/${monitor.id}`} className="font-medium text-zinc-200 transition hover:text-lime-300 hover:underline">{monitor.name} ↗</a><p className="mt-1 max-w-sm truncate text-xs text-zinc-500">{monitor.url}</p></td>
                           <td className="px-6 py-4"><span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ${tone}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status}</span></td>
                           <td className="px-6 py-4 text-zinc-400">{Math.round(monitor.check_interval_seconds / 60)} min</td>
                           <td className="px-6 py-4 text-zinc-500">{formatDate(monitor.last_checked_at)}</td>
