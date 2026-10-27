@@ -1,14 +1,14 @@
-"""Small polling worker that automatically checks due active monitors.
+"""Polling worker that claims due monitors before performing network checks.
 
-This MVP worker is intended for a single FastAPI process. For multi-instance
-production deployments, move scheduling to a dedicated worker/queue and use
-database-level claiming to avoid duplicate checks.
+The MVP worker can run in more than one API process without two workers
+claiming the same due schedule at once. The claim is a short database update;
+network I/O happens after the claim transaction has been committed.
 """
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.monitoring import perform_check
@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 10
 BATCH_SIZE = 20
-# Monitor timeout is constrained to 30 seconds by the API schema. Allow a
-# running check plus one polling interval to finish during graceful shutdown.
+# The API caps monitor timeouts at 30 seconds. This lease leaves a small buffer
+# if a process crashes after claiming a monitor but before persisting its check.
+CLAIM_LEASE_SECONDS = 40
 SHUTDOWN_TIMEOUT_SECONDS = 35
 
 
 def run_due_checks() -> int:
-    """Run checks for currently due monitors; return the number attempted."""
+    """Claim due monitors atomically, then check them outside the claim transaction."""
     now = datetime.now(timezone.utc)
 
-    # Read only IDs here; each check gets its own short-lived session.
     with SessionLocal() as db:
         monitor_ids = list(
             db.scalars(
@@ -44,29 +44,38 @@ def run_due_checks() -> int:
 
     attempted = 0
     for monitor_id in monitor_ids:
+        # Conditional UPDATE is the claim: only one concurrent worker can move
+        # this still-due schedule into the lease window. Commit before HTTP I/O.
+        claim_time = datetime.now(timezone.utc)
+        lease_until = claim_time + timedelta(seconds=CLAIM_LEASE_SECONDS)
         with SessionLocal() as db:
             try:
-                # Serialize checks for the same monitor. perform_check commits
-                # and advances next_check_at after recording the result.
-                monitor = db.scalar(
-                    select(Monitor)
-                    .where(Monitor.id == monitor_id)
-                    .with_for_update(skip_locked=True)
+                claim = db.execute(
+                    update(Monitor)
+                    .where(
+                        Monitor.id == monitor_id,
+                        Monitor.is_active.is_(True),
+                        Monitor.next_check_at <= claim_time,
+                    )
+                    .values(next_check_at=lease_until)
                 )
-                if monitor is None or not monitor.is_active:
+                if claim.rowcount != 1:
                     db.rollback()
                     continue
+                db.commit()
+            except SQLAlchemyError:
+                db.rollback()
+                logger.exception("Could not claim monitor_id=%s", monitor_id)
+                continue
 
-                # Re-check due time after obtaining the lock; another worker or
-                # manual check may already have advanced the schedule.
-                now = datetime.now(timezone.utc)
-                next_check_at = monitor.next_check_at
-                # SQLite drops timezone information when round-tripping DateTime
-                # values. Normalize only naive values so tests behave like the
-                # timezone-aware timestamps returned by PostgreSQL in production.
-                if next_check_at is not None and next_check_at.tzinfo is None:
-                    next_check_at = next_check_at.replace(tzinfo=timezone.utc)
-                if next_check_at is not None and next_check_at > now:
+        # The lease prevents other scheduled workers from claiming this monitor
+        # while the endpoint is checked. No row lock/transaction is held over HTTP.
+        with SessionLocal() as db:
+            try:
+                monitor = db.scalar(
+                    select(Monitor).where(Monitor.id == monitor_id)
+                )
+                if monitor is None or not monitor.is_active:
                     db.rollback()
                     continue
 
@@ -129,8 +138,6 @@ class MonitoringWorker:
 
         thread.join(timeout=SHUTDOWN_TIMEOUT_SECONDS)
         if thread.is_alive():
-            # Keep the reference so start() cannot create a second worker while
-            # the previous thread is still finishing a slow in-flight check.
             logger.warning(
                 "Monitoring worker did not stop within %s seconds; "
                 "will not start a replacement while it is still running",
