@@ -47,20 +47,46 @@ export default function AnalyticsClient() {
   }, []);
 
   useEffect(() => {
-    if (!monitorId) { setChecks([]); return; }
+    if (!monitorId) { setChecks([]); setLoadingChecks(false); return; }
     let active = true;
     setLoadingChecks(true);
     setError("");
-    fetch(`/api/monitors/${encodeURIComponent(monitorId)}/checks?limit=100`, { cache: "no-store" })
-      .then(async (response) => {
-        const body = await response.json();
+    setChecks([]);
+    const cutoff = Date.now() - rangeHours * 60 * 60 * 1000;
+
+    async function loadRange() {
+      const allChecks: Check[] = [];
+      const pageSize = 100;
+      let offset = 0;
+
+      while (active) {
+        const response = await fetch(
+          `/api/monitors/${encodeURIComponent(monitorId)}/checks?limit=${pageSize}&offset=${offset}`,
+          { cache: "no-store" },
+        );
+        const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.detail || "Could not load check history.");
-        if (active) setChecks(Array.isArray(body) ? body as Check[] : []);
-      })
+        const page = Array.isArray(body) ? body as Check[] : [];
+        allChecks.push(...page);
+
+        // The API returns newest checks first. Stop once we've reached the selected
+        // period, or when there are no more pages.
+        const oldestInPage = page.length
+          ? new Date(page[page.length - 1].checked_at).getTime()
+          : Number.NaN;
+        if (page.length < pageSize || (Number.isFinite(oldestInPage) && oldestInPage < cutoff)) break;
+        offset += page.length;
+      }
+
+      if (active) setChecks(allChecks);
+    }
+
+    loadRange()
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load check history."); })
       .finally(() => { if (active) setLoadingChecks(false); });
+
     return () => { active = false; };
-  }, [monitorId]);
+  }, [monitorId, rangeHours]);
 
   const cutoff = Date.now() - rangeHours * 60 * 60 * 1000;
   const filtered = useMemo(() => checks.filter((check) => new Date(check.checked_at).getTime() >= cutoff), [checks, cutoff]);
@@ -101,7 +127,7 @@ export default function AnalyticsClient() {
           <div className="mb-5 flex flex-wrap gap-2">
             {ranges.map((range) => <button key={range.hours} onClick={() => setRangeHours(range.hours)} className={`interactive-control rounded-xl border px-3 py-2 text-sm transition ${rangeHours === range.hours ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-200" : "border-white/10 text-zinc-400 hover:bg-white/[0.04]"}`}>{range.label}</button>)}
           </div>
-          <p className="mb-4 text-xs text-zinc-500">{selectedMonitor?.url} · {selectedMonitor?.current_status === "up" ? "Currently operational" : selectedMonitor?.current_status === "down" ? "Currently down" : "Status pending"} · Based on up to 100 most recent checks</p>
+          <p className="mb-4 text-xs text-zinc-500">{selectedMonitor?.url} · {selectedMonitor?.current_status === "up" ? "Currently operational" : selectedMonitor?.current_status === "down" ? "Currently down" : "Status pending"} · Complete recorded history for selected period</p>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "Uptime", value: uptime === null ? "—" : `${uptime.toFixed(2)}%`, note: `${successes} successful checks` },
