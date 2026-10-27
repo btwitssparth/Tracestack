@@ -238,6 +238,7 @@ export default function DashboardClient({ email }: { email: string }) {
         <a href="#overview" className="flex items-center gap-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.08] px-3 py-3 text-sm font-medium text-cyan-200"><span>▦</span> Overview</a>
         <a href="#monitors" className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"><span>◉</span> Monitors</a>
         <a href="#incidents" className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"><span>△</span> Incidents</a>
+        <a href="/dashboard/analytics" className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"><span>↗</span> Analytics</a>
         <div className="mt-auto rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
           <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> API connection</div>
           <p className="text-xs leading-5 text-zinc-500">Monitor data is loaded securely through your signed-in session.</p>
